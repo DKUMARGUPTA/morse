@@ -41,6 +41,22 @@ model User {
   blocksReceived   Block[]              @relation("Blocked")
   reportsMade      Report[]             @relation("Reporter")
   reportsReceived  Report[]             @relation("Reported")
+  pushSubscriptions PushSubscription[]
+}
+
+// Web Push (PWA): one row per browser/device push endpoint.
+// endpoint is unique — the same browser re-subscribing updates the row.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model UserSettings {

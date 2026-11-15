@@ -1,11 +1,12 @@
-/* Morse Messenger — service worker (PWA install criteria + offline shell)
+/* Morse Messenger — service worker (PWA install criteria + offline shell + Web Push)
  * Strategies:
  *  - navigation requests : network-first, offline fallback to cached shell
  *  - static assets       : stale-while-revalidate
  *  - /api/* & socket.io  : network only (never cached)
+ *  - push events         : metadata-only notification (no message text — E2EE safe)
  */
 
-const VERSION = 'morse-v1'
+const VERSION = 'morse-v2'
 const SHELL_CACHE = `${VERSION}-shell`
 const ASSET_CACHE = `${VERSION}-assets`
 
@@ -101,4 +102,50 @@ self.addEventListener('fetch', (event) => {
       })
     )
   }
+})
+
+// ---------- Web Push ----------
+
+/* Payload is metadata-only: { s: senderName, c: conversationId, b?: body }.
+ * Message text is never included, so E2EE chats leak nothing. Consecutive
+ * messages in the same conversation replace the notification (tag + renotify). */
+self.addEventListener('push', (event) => {
+  let data = {}
+  try {
+    data = event.data ? event.data.json() : {}
+  } catch {
+    data = {}
+  }
+  const title = data.s || 'Morse Messenger'
+  const body = data.b || 'New message · · − − ·'
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: data.c || 'morse-message',
+      renotify: true,
+      data,
+    })
+  )
+})
+
+/* Click-through: focus an open window and tell it to open the conversation;
+ * otherwise open the app. */
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const conversationId = event.notification.data && event.notification.data.c
+  event.waitUntil(
+    (async () => {
+      const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      for (const client of clientList) {
+        if (client.url.startsWith(self.location.origin)) {
+          client.focus()
+          if (conversationId) client.postMessage({ type: 'open-conversation', conversationId })
+          return
+        }
+      }
+      await self.clients.openWindow('/')
+    })()
+  )
 })

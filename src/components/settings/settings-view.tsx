@@ -12,6 +12,7 @@ import { useApp } from '@/lib/store'
 import { useSignalPlayer } from '@/hooks/use-signal-player'
 import { canVibrate } from '@/lib/signal-engine'
 import { playChime } from '@/lib/notification-sound'
+import { enablePush, disablePush, getPushState, pushSupported, type PushState } from '@/lib/push-client'
 import { keyFingerprint, publishPublicKey, resetLocalKeypair } from '@/lib/e2ee'
 import { cn } from '@/lib/utils'
 import { PwaInstallSection } from '@/components/pwa/pwa-install'
@@ -163,6 +164,7 @@ export function SettingsView() {
               {tr('testSound')}
             </button>
             <p className="text-[11px] text-[#8CA3C7]">{tr('testSoundNote')}</p>
+            <PushRow />
           </div>
         </SectionCard>
 
@@ -325,6 +327,60 @@ function MiniStat({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl border border-[#1E2C4F] bg-[#0A1224] p-2.5 text-center">
       <p className="font-mono text-sm font-bold text-[#22D3EE]">{value}</p>
       <p className="truncate text-[10px] text-[#8CA3C7]">{label}</p>
+    </div>
+  )
+}
+
+/** Web Push (ROADMAP P0): system notifications even when the app is closed. */
+function PushRow() {
+  const tr = useApp((s) => s.tr)
+  const [state, setState] = useState<PushState | null>(null)
+  const [working, setWorking] = useState(false)
+
+  useEffect(() => {
+    void getPushState().then(setState)
+  }, [])
+
+  async function toggle(on: boolean) {
+    setWorking(true)
+    try {
+      if (on) {
+        const res = await enablePush()
+        if (!res.ok) {
+          // 'denied' still reads back as denied below; surface other failures
+          if (res.error === 'key' || res.error === 'subscribe') {
+            alert(tr('pushError'))
+          }
+        }
+      } else {
+        await disablePush()
+      }
+      setState(await getPushState())
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  if (state === 'unsupported' || !pushSupported()) return null
+
+  return (
+    <div className="space-y-1.5">
+      <label className="flex cursor-pointer items-center justify-between gap-3">
+        <span className="min-w-0">
+          <span className="block text-sm text-[#E7EEFB]">{tr('pushNotifications')}</span>
+          {state === 'denied' ? (
+            <span className="mt-0.5 block text-[11px] leading-snug text-amber-400/90">{tr('pushDenied')}</span>
+          ) : (
+            <span className="mt-0.5 block text-[11px] leading-snug text-[#8CA3C7]">{tr('pushNote')}</span>
+          )}
+        </span>
+        <Switch
+          checked={state === 'subscribed'}
+          disabled={working || state === 'denied'}
+          onCheckedChange={(v) => void toggle(v)}
+          className="data-[state=checked]:bg-[#22D3EE]"
+        />
+      </label>
     </div>
   )
 }

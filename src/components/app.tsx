@@ -23,6 +23,18 @@ export default function App() {
     // notification chimes to be audible later
     primeAudio()
     void useApp.getState().loadSession()
+
+    // Web Push click-through: the service worker forwards notification taps
+    // here so the tapped conversation opens in the already-running app
+    if ('serviceWorker' in navigator) {
+      const onSwMessage = (event: MessageEvent) => {
+        if (event.data?.type === 'open-conversation' && event.data.conversationId) {
+          void useApp.getState().openConversation(event.data.conversationId)
+        }
+      }
+      navigator.serviceWorker.addEventListener('message', onSwMessage)
+      return () => navigator.serviceWorker.removeEventListener('message', onSwMessage)
+    }
   }, [])
 
   useSocket()

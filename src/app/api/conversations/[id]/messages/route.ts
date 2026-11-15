@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { emitToRoom, fail, isResponse, messageInclude, messageToDTO, ok, requireUser, userRoom } from '@/lib/api-helpers'
+import { notifyPushRecipients } from '@/lib/push-server'
 import { textToMorse } from '@/lib/morse'
 
 /** POST /api/conversations/[id]/messages — send a text/morse message */
@@ -77,6 +78,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       emitToRoom(userRoom(recipient.userId), 'message:new', payload)
     }
     emitToRoom(userRoom(me.id), 'message:new', payload) // other devices of sender
+
+    // Web Push (ROADMAP P0): metadata-only payload — no message text, so E2EE
+    // chats leak nothing. Muted conversations are skipped.
+    notifyPushRecipients(
+      recipients.filter((m) => !m.muted).map((m) => m.userId),
+      { s: me.displayName, c: id },
+    )
 
     return ok({ message: dto })
   } catch {

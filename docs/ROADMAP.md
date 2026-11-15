@@ -6,15 +6,17 @@ performance), SimpleX (no user IDs, link/QR-based contact establishment) and
 the offline-first PWA pattern (IndexedDB + Background Sync).
 
 ## P0 — trust, portability and reachability (next)
-- **Web Push notifications** — the messenger currently only makes sound/vibration while the app is open. Add VAPID-keyed Web Push (service worker `push` handler + stored subscriptions) so messages reach users when the app is closed — this is the single biggest UX gap on mobile.
 - **Default-on E2EE for new 1:1 conversations** — encrypted-by-default like Signal; keep the toggle for groups.
 - **Disappearing messages** — per-conversation TTL (24h / 7d / 90d), enforced at read time, cleaned by a periodic job.
 - **QR-code contact invitations** — the `qrcode` dependency is already present; render invite codes as scannable QR (SimpleX-style connection).
+- **Push payload niceties** — localized notification body (currently generic), per-conversation unread counts, and iOS install-first onboarding (iOS requires a home-screen install for push).
 
 > Done previously: **hosted realtime** (Supabase broadcast transport is live in
-> production; the Cloudflare Worker remains the stricter upgrade path) and the
+> production; the Cloudflare Worker remains the stricter upgrade path), the
 > **Vercel-native polling fallback** (visibility-gated poller that self-skips
-> while realtime is healthy).
+> while realtime is healthy) and **Web Push notifications** (VAPID-keyed,
+> metadata-only payloads, `PushSubscription` table, Settings toggle with
+> permission + denied-state handling, SW click-through to the conversation).
 
 ## P1 — stronger encryption
 - **Signal-style Double Ratchet** (X3DH + ratcheting) for forward secrecy and post-compromise security.
