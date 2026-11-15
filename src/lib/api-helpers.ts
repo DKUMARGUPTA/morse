@@ -1,6 +1,6 @@
 // Morse Messenger — API helpers: responses, session guard, socket bus bridge
 
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { getSessionUser, SessionUser } from '@/lib/auth'
 import { db } from '@/lib/db'
 import type { ChatDisplayMode, MessageDTO, MessageKind, PlayMode, SendMode } from '@/lib/types'
@@ -29,32 +29,53 @@ export function isResponse(x: unknown): x is NextResponse {
  *  (SOCKET_INTERNAL_URL + SOCKET_INTERNAL_SECRET).
  *  Production B: Supabase Realtime broadcast via its HTTP endpoint
  *  (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY) — no extra infra needed.
- *  Both paths are fired independently; each client listens on one transport. */
+ *  Both paths are fired independently; each client listens on one transport.
+ *  Broadcasts run inside `after()` so a serverless invocation stays alive
+ *  until the fetches flush — a bare fire-and-forget fetch would be frozen
+ *  mid-flight when the handler returns. */
 export function emitToRoom(room: string, event: string, data: unknown) {
-  const url = process.env.SOCKET_INTERNAL_URL || 'http://127.0.0.1:3004/internal/emit'
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (process.env.SOCKET_INTERNAL_SECRET) headers['x-internal-secret'] = process.env.SOCKET_INTERNAL_SECRET
-  fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ room, event, data }),
-  }).catch(() => {
-    // realtime is best-effort; persistence is the source of truth
-  })
-  supabaseBroadcast(room, event, data)
+  const internalUrl = process.env.SOCKET_INTERNAL_URL || 'http://127.0.0.1:3004/internal/emit'
+  const internalHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (process.env.SOCKET_INTERNAL_SECRET) internalHeaders['x-internal-secret'] = process.env.SOCKET_INTERNAL_SECRET
+
+  const sbUrl = process.env.SUPABASE_URL
+  const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const sbBody = sbUrl && sbKey ? buildSupabaseBody(room, event, data) : null
+
+  const run = () => {
+    fetch(internalUrl, {
+      method: 'POST',
+      headers: internalHeaders,
+      body: JSON.stringify({ room, event, data }),
+    }).catch(() => {
+      // realtime is best-effort; persistence is the source of truth
+    })
+    if (sbUrl && sbKey && sbBody) {
+      fetch(`${sbUrl}/realtime/v1/api/broadcast`, {
+        method: 'POST',
+        headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`, 'Content-Type': 'application/json' },
+        body: sbBody,
+        signal: AbortSignal.timeout(4000),
+      }).catch(() => {
+        // realtime is best-effort; persistence is the source of truth
+      })
+    }
+  }
+
+  try {
+    after(run)
+  } catch {
+    run() // outside a request scope (scripts, cron) — plain best-effort
+  }
 }
 
 const SB_MESSAGE_EVENTS = new Set(['message:new', 'message:update'])
 
-/** Supabase Realtime HTTP broadcast (server-only, service key).
- *  Topic mapping: room `user:<id>` / `conv:<id>` (no prefix here — the
- *  realtime server exposes joined topics as `realtime:<topic>`).
- *  Payloads over ~2.4 KB are replaced by a `{conversationId, stub:true}`
- *  marker; clients refetch the conversation (broadcast payload limit). */
-function supabaseBroadcast(room: string, event: string, data: unknown) {
-  const sbUrl = process.env.SUPABASE_URL
-  const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!sbUrl || !sbKey) return
+/** Build the Supabase batch-broadcast body. Topic mapping: room `user:<id>` /
+ *  `conv:<id>` (no prefix here — the realtime server exposes joined topics as
+ *  `realtime:<topic>`). Payloads over ~2.4 KB become `{conversationId,
+ *  stub:true}` markers; clients refetch the conversation (payload limit). */
+function buildSupabaseBody(room: string, event: string, data: unknown): string {
   let payload = data
   try {
     if (data && typeof data === 'object' && JSON.stringify(data).length > 2400 && SB_MESSAGE_EVENTS.has(event)) {
@@ -63,14 +84,7 @@ function supabaseBroadcast(room: string, event: string, data: unknown) {
   } catch {
     /* keep original payload */
   }
-  fetch(`${sbUrl}/realtime/v1/api/broadcast`, {
-    method: 'POST',
-    headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: [{ topic: room, event, payload: payload ?? {} }] }),
-    signal: AbortSignal.timeout(4000),
-  }).catch(() => {
-    // realtime is best-effort; persistence is the source of truth
-  })
+  return JSON.stringify({ messages: [{ topic: room, event, payload: payload ?? {} }] })
 }
 
 export function userRoom(userId: string) {
