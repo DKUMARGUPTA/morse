@@ -18,6 +18,8 @@
 - **Familiar chat** — 1:1 conversations via invite links + QR codes, real-time delivery with typing indicators, read receipts, unread badges
 - **Reliable delivery** — realtime push with an automatic polling safety net: if the socket transport is ever down, messages still arrive (and chime) within seconds — no manual refresh
 - **Push notifications** — VAPID-keyed Web Push reaches you even when the app is closed, with tap-through to the conversation; payloads are metadata-only (sender name, never message text) so E2EE chats stay private; enable it in Settings → Notifications
+- **System notifications in the background** — when the app is open but unseen (another tab, screen off, another app), an OS notification banner appears with the sender and preview; a gentle one-time prompt helps users opt in
+- **Email verification** — every signup gets a confirmation link (Resend or any SMTP provider; only sha256 token hashes stored); verified status shows in the app with a resend banner
 - **Notification sounds** — audible chime + vibration for incoming messages (open or background chats), unlocked on first tap for mobile browsers; test button in Settings
 - **Morse composer** — every message can be composed in three modes: Text / Morse / Dual (side-by-side preview)
 - **Signal channels** — transmit Morse via Web Audio tones, screen-light overlay (for cameras/optics), or device vibration; graceful capability detection and fallbacks

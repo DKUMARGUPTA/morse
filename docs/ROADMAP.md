@@ -14,9 +14,12 @@ the offline-first PWA pattern (IndexedDB + Background Sync).
 > Done previously: **hosted realtime** (Supabase broadcast transport is live in
 > production; the Cloudflare Worker remains the stricter upgrade path), the
 > **Vercel-native polling fallback** (visibility-gated poller that self-skips
-> while realtime is healthy) and **Web Push notifications** (VAPID-keyed,
+> while realtime is healthy), **Web Push notifications** (VAPID-keyed,
 > metadata-only payloads, `PushSubscription` table, Settings toggle with
-> permission + denied-state handling, SW click-through to the conversation).
+> permission + denied-state handling, SW click-through to the conversation),
+> **background system notifications** (SW-shown banners when the app is hidden,
+> push deduped while a page client exists) and **email verification**
+> (sha256-hashed single-use tokens, Resend/SMTP providers, resend banner).
 
 ## P1 — stronger encryption
 - **Signal-style Double Ratchet** (X3DH + ratcheting) for forward secrecy and post-compromise security.
