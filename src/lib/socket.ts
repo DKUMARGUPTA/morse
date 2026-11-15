@@ -108,8 +108,12 @@ export function useSocket() {
       rt.connect()
       shared = rt
       cleanup = () => rt.close()
-    } else {
+    } else if (process.env.NODE_ENV === 'development') {
       // ---------- sandbox/preview transport: socket.io via Caddy ----------
+      // Dev/preview only. A production build without NEXT_PUBLIC_REALTIME_WS
+      // deliberately runs with no transport: retrying handshakes against
+      // serverless would burn thousands of function invocations per idle tab
+      // and realtime stays off until the CF worker is deployed + configured.
       let socket: Socket | null = null
       let lastAuthRetry = 0
 
@@ -156,6 +160,11 @@ export function useSocket() {
         socket?.disconnect()
         useApp.getState().setSocketConnected(false)
       }
+    } else {
+      // ---------- production without the relay: no transport ----------
+      // The app still works fully via fetch + refresh; realtime switches on
+      // as soon as NEXT_PUBLIC_REALTIME_WS points at the deployed worker.
+      cleanup = () => undefined
     }
 
     return () => {
