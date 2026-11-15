@@ -2,6 +2,11 @@
 // Prereq: `wrangler dev` running (default ws://127.0.0.1:8787).
 // Usage: bun tests/ws-relay-test.mjs
 //
+// NOTE: run against a worker WITHOUT MEMBER_API_URL (pure unit mode). With
+// membership enforcement enabled the conv-room assertions below fail BY DESIGN
+// — fake conversation ids are correctly denied (that path is covered by
+// tests/membership-test.mjs and scripts/realtime-e2e-test.mjs with real ids).
+//
 // Verifies the exact socket.io parity contract used by the app:
 //   user-room events  -> message:new/update/hidden, receipt:update, conv:new/update
 //   conv-room events  -> typing (sender excluded)
@@ -9,6 +14,19 @@
 //   auth              -> bad/expired tokens rejected before upgrade
 
 import { createHmac } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+
+// auto-load .dev.vars so the suite always signs tokens with the secret the
+// worker is actually running with (prevents secret-mismatch false failures)
+try {
+  const devVars = readFileSync(new URL('../.dev.vars', import.meta.url), 'utf8')
+  for (const line of devVars.split('\n')) {
+    const m = line.match(/^\s*([A-Z_]+)\s*=\s*"?([^"\n]*)"?\s*$/)
+    if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2]
+  }
+} catch {
+  /* no .dev.vars — fall back to env or defaults */
+}
 
 const BASE = (process.env.WS_BASE ?? 'ws://127.0.0.1:8787').replace(/^ws/, 'http')
 const WS_URL = BASE.replace(/^http/, 'ws')

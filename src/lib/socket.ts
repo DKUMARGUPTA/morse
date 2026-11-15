@@ -170,14 +170,16 @@ export function emitTyping(conversationId: string, displayName: string, isTyping
   shared?.emit('typing', { conversationId, displayName, isTyping })
 }
 
-/** Join/leave a conversation room (used for typing indicators). */
+/** Join/leave a conversation room (used for typing indicators).
+ *  Always an object so both transports (socket.io bus and the CF relay)
+ *  carry the identical wire shape `{ conversationId }`. */
 export function joinConversationRoom(conversationId: string | null) {
   if (!conversationId) return
-  shared?.emit('join', conversationId)
+  shared?.emit('join', { conversationId })
 }
 
 export function leaveConversationRoom(conversationId: string) {
-  shared?.emit('leave', conversationId)
+  shared?.emit('leave', { conversationId })
 }
 
 // ---------- time formatting ----------

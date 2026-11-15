@@ -89,14 +89,18 @@ io.on('connection', (socket) => {
     setPresence(userId, +1)
   }
 
-  socket.on('join', (conversationId: string) => {
-    if (typeof conversationId === 'string' && conversationId.length < 64) {
+  // accepts both the legacy bare string and the object form `{ conversationId }`
+  // (the object form is the canonical wire shape shared with the CF realtime worker)
+  socket.on('join', (arg: unknown) => {
+    const conversationId = typeof arg === 'string' ? arg : String((arg as { conversationId?: unknown })?.conversationId ?? '')
+    if (conversationId.length < 64 && /^[A-Za-z0-9_-]+$/.test(conversationId)) {
       socket.join(`conv:${conversationId}`)
     }
   })
 
-  socket.on('leave', (conversationId: string) => {
-    if (typeof conversationId === 'string') {
+  socket.on('leave', (arg: unknown) => {
+    const conversationId = typeof arg === 'string' ? arg : String((arg as { conversationId?: unknown })?.conversationId ?? '')
+    if (conversationId.length < 64 && /^[A-Za-z0-9_-]+$/.test(conversationId)) {
       socket.leave(`conv:${conversationId}`)
     }
   })
