@@ -17,6 +17,7 @@ import type { Lang, DictKey } from '@/lib/i18n'
 import { t } from '@/lib/i18n'
 import { decryptText, encryptText, publishPublicKey } from '@/lib/e2ee'
 import { playChime, vibrate } from '@/lib/notification-sound'
+import { isAppHidden, showSystemNotification } from '@/lib/system-notifications'
 
 export type Tab = 'chats' | 'morse' | 'learn' | 'settings'
 
@@ -31,7 +32,7 @@ export interface NotificationItem {
 }
 
 interface AppState {
-  me: (UserDTO & { email: string }) | null
+  me: (UserDTO & { email: string; emailVerified: boolean }) | null
   settings: SettingsDTO | null
   sessionLoaded: boolean
   socketConnected: boolean
@@ -258,6 +259,16 @@ export const useApp = create<AppState>((set, get) => ({
             }
             if (settings?.soundEnabled) playChime(settings.volume)
             if (settings?.vibrationEnabled) vibrate(60)
+            // OS notification while the app itself is in the background
+            // (other tab / screen off / other app). A visible app shows the
+            // in-app bell instead — no duplicate banners.
+            if (isAppHidden()) {
+              void showSystemNotification({
+                title: senderName,
+                body: (preview || '···').slice(0, 80),
+                conversationId: c.id,
+              })
+            }
           }
           // open conversation changed (either direction) — pull the messages so
           // the visible chat updates itself without a manual refresh
@@ -498,6 +509,14 @@ export const useApp = create<AppState>((set, get) => ({
       // sound + vibration for BOTH background and open conversations
       if (settings?.soundEnabled) playChime(settings.volume)
       if (settings?.vibrationEnabled) vibrate(60)
+      // OS notification while the app is in the background (see loadConversations)
+      if (isAppHidden()) {
+        void showSystemNotification({
+          title: message.senderName,
+          body: (preview || '···').slice(0, 80),
+          conversationId,
+        })
+      }
     }
     if (activeId === conversationId && !isMine) {
       void fetch(`/api/conversations/${conversationId}/read`, { method: 'POST' })

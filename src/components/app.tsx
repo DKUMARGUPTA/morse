@@ -24,6 +24,21 @@ export default function App() {
     primeAudio()
     void useApp.getState().loadSession()
 
+    // email-verification redirect feedback (/api/auth/verify → ?verified=1|0)
+    const params = new URLSearchParams(window.location.search)
+    const verified = params.get('verified')
+    if (verified !== null) {
+      params.delete('verified')
+      const rest = params.toString()
+      window.history.replaceState(null, '', window.location.pathname + (rest ? `?${rest}` : ''))
+      void useApp.getState().loadSession() // refresh me.emailVerified
+      useApp.getState().addNotification({
+        type: 'system',
+        titleKey: 'notifTitle',
+        body: verified === '1' ? useApp.getState().tr('verifiedSuccess') : useApp.getState().tr('verifiedFailed'),
+      })
+    }
+
     // Web Push click-through: the service worker forwards notification taps
     // here so the tapped conversation opens in the already-running app
     if ('serviceWorker' in navigator) {

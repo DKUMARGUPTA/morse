@@ -104,6 +104,8 @@ export interface SessionUser {
   tokenVersion: number
   // E2EE (beta): own public key JWK (null until published)
   publicKey: string | null
+  // Email verification status (drives the in-app verify banner)
+  emailVerified: boolean
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {
@@ -114,11 +116,11 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   if (!payload) return null
   const user = await db.user.findUnique({
     where: { id: payload.sub },
-    select: { id: true, email: true, displayName: true, avatarColor: true, tokenVersion: true, publicKey: true },
+    select: { id: true, email: true, displayName: true, avatarColor: true, tokenVersion: true, publicKey: true, emailVerifiedAt: true },
   })
   if (!user) return null
   if (user.tokenVersion !== payload.tv) return null // signed out everywhere
-  return user
+  return { ...user, emailVerified: !!user.emailVerifiedAt }
 }
 
 export async function setSessionCookie(userId: string, tokenVersion: number) {

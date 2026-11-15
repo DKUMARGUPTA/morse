@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { after } from 'next/server'
 import { db } from '@/lib/db'
 import { hashPassword, setSessionCookie } from '@/lib/auth'
 import { fail } from '@/lib/api-helpers'
 import { clientIp, rateLimit } from '@/lib/rate-limit'
+import { newVerificationToken, verificationExpiry } from '@/lib/verification'
+import { sendVerificationEmail } from '@/lib/email'
 
 const AVATAR_COLORS = ['#22D3EE', '#F472B6', '#34D399', '#FBBF24', '#A78BFA', '#FB7185', '#4ADE80', '#38BDF8']
 
@@ -38,7 +41,21 @@ export async function POST(req: NextRequest) {
     })
 
     await setSessionCookie(user.id, user.tokenVersion)
-    return NextResponse.json({ id: user.id, email: user.email, displayName: user.displayName, avatarColor: user.avatarColor })
+
+    // Email verification: store only the token hash; email goes out via after()
+    // so a slow/failing provider can never block or fail the signup response.
+    try {
+      const { raw, hash } = newVerificationToken()
+      await db.verificationToken.create({
+        data: { userId: user.id, tokenHash: hash, expiresAt: verificationExpiry() },
+      })
+      const link = `${req.nextUrl.origin}/api/auth/verify?token=${raw}`
+      after(() => void sendVerificationEmail(user.email, link))
+    } catch {
+      // verification is best-effort — the account itself is ready to use
+    }
+
+    return NextResponse.json({ id: user.id, email: user.email, displayName: user.displayName, avatarColor: user.avatarColor, emailVerified: false })
   } catch {
     return fail(500, 'SERVER_ERROR')
   }

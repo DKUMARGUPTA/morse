@@ -12,6 +12,8 @@ import { LearnView } from '@/components/learn/learn-view'
 import { SettingsView } from '@/components/settings/settings-view'
 import { NotificationBell } from '@/components/notification-bell'
 import { PwaInstallSidebarButton } from '@/components/pwa/pwa-install'
+import { NotificationPrompt } from '@/components/pwa/notification-prompt'
+import { VerifyEmailBanner } from '@/components/verify-banner'
 
 const TABS: { id: Tab; icon: React.ReactNode; key: 'navChats' | 'navMorse' | 'navLearn' | 'navSettings' }[] = [
   { id: 'chats', icon: <MessageCircle className="h-5 w-5" />, key: 'navChats' },
@@ -120,6 +122,9 @@ export function MainShell() {
             <NotificationBell unread={unreadNotifs} label={<Bell className="h-5 w-5 text-[#C9D6F2]" />} />
           </header>
         )}
+
+        <VerifyEmailBanner />
+        <NotificationPrompt />
 
         <main className="min-h-0 flex-1 overflow-hidden pb-16 md:pb-0">
           {tab === 'chats' && <ChatList />}

@@ -110,23 +110,30 @@ self.addEventListener('fetch', (event) => {
  * Message text is never included, so E2EE chats leak nothing. Consecutive
  * messages in the same conversation replace the notification (tag + renotify). */
 self.addEventListener('push', (event) => {
-  let data = {}
-  try {
-    data = event.data ? event.data.json() : {}
-  } catch {
-    data = {}
-  }
-  const title = data.s || 'Morse Messenger'
-  const body = data.b || 'New message · · − − ·'
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      tag: data.c || 'morse-message',
-      renotify: true,
-      data,
-    })
+    (async () => {
+      let data = {}
+      try {
+        data = event.data ? event.data.json() : {}
+      } catch {
+        data = {}
+      }
+      // If any app window is open (visible or in the background), the page
+      // shows the notification/chime itself — pushing here too would double
+      // every banner. This path only covers the fully-closed app.
+      const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      if (clientList.length > 0) return
+      const title = data.s || 'Morse Messenger'
+      const body = data.b || 'New message · · − − ·'
+      await self.registration.showNotification(title, {
+        body,
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        tag: data.c || 'morse-message',
+        renotify: true,
+        data,
+      })
+    })()
   )
 })
 

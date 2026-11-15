@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     }
 
     await setSessionCookie(user.id, user.tokenVersion)
-    return NextResponse.json({ id: user.id, email: user.email, displayName: user.displayName, avatarColor: user.avatarColor })
+    return NextResponse.json({ id: user.id, email: user.email, displayName: user.displayName, avatarColor: user.avatarColor, emailVerified: !!user.emailVerifiedAt })
   } catch {
     return fail(500, 'SERVER_ERROR')
   }
