@@ -13,4 +13,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run lint
+      # app typecheck (root tsconfig excludes mini-services/scripts)
       - run: bunx tsc --noEmit
+      # realtime worker typecheck (self-contained tsconfig)
+      - run: bunx tsc --noEmit -p mini-services/realtime-worker/tsconfig.json

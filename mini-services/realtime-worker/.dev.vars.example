@@ -1,0 +1,6 @@
+# Copy to .dev.vars for local `wrangler dev`. NEVER commit real secrets.
+AUTH_SECRET=morse-messenger-dev-secret-do-not-use-in-prod
+INTERNAL_SECRET=dev-internal-secret
+# Optional production-grade membership enforcement (leave unset locally):
+# MEMBER_API_URL=https://your-app.example.com/api/internal/conv-members
+# MEMBER_API_SECRET=same-as-INTERNAL_SECRET

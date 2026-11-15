@@ -1,0 +1,23 @@
+# Morse Messenger realtime relay — Cloudflare Worker + Durable Object
+# Zero runtime dependencies: pure platform primitives (WebSocket hibernation).
+
+name = "morse-realtime"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+[observability]
+enabled = true
+
+[durable_objects]
+bindings = [{ name = "HUB", class_name = "RealtimeHub" }]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RealtimeHub"]
+
+# Secrets (set via `wrangler secret put`, never in this file):
+#   AUTH_SECRET       — HS256 secret shared with the Next.js app (socket tokens)
+#   INTERNAL_SECRET   — shared secret for POST /internal/emit from the app
+# Vars (set via `wrangler vars put` or dashboard):
+#   MEMBER_API_URL    — e.g. https://your-app.example.com/api/internal/conv-members
+#   MEMBER_API_SECRET — same value as INTERNAL_SECRET (membership checks)

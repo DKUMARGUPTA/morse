@@ -23,12 +23,17 @@ export function isResponse(x: unknown): x is NextResponse {
   return x instanceof NextResponse
 }
 
-/** Fire-and-forget broadcast through the realtime mini-service (port 3003). */
+/** Fire-and-forget broadcast through the realtime bus.
+ *  Local sandbox: socket.io mini-service bridge (port 3004).
+ *  Production: the zero-dependency Cloudflare realtime worker
+ *  (SOCKET_INTERNAL_URL + SOCKET_INTERNAL_SECRET). */
 export function emitToRoom(room: string, event: string, data: unknown) {
   const url = process.env.SOCKET_INTERNAL_URL || 'http://127.0.0.1:3004/internal/emit'
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (process.env.SOCKET_INTERNAL_SECRET) headers['x-internal-secret'] = process.env.SOCKET_INTERNAL_SECRET
   fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ room, event, data }),
   }).catch(() => {
     // realtime is best-effort; persistence is the source of truth

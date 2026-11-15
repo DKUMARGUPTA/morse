@@ -32,7 +32,7 @@
 | Styling | Tailwind CSS 4, shadcn/ui, lucide-react |
 | State | Zustand |
 | Database | Supabase Postgres via Prisma ORM |
-| Realtime | socket.io relay service (separate mini-service) |
+| Realtime | Zero-dependency Cloudflare Worker + Durable Object (production) · socket.io relay mini-service (sandbox/preview) |
 | Auth | Email + scrypt password hashing, JWT httpOnly cookies |
 
 ## Project structure
@@ -44,9 +44,11 @@
 │   ├── components/          # chats, morse studio, learn, settings, pwa
 │   ├── hooks/               # signal player, PWA install, toasts
 │   └── lib/                 # morse engine, signal engine, auth, i18n, store, socket
-├── mini-services/           # socket.io realtime relay (port 3003)
+├── mini-services/
+│   ├── chat-service/        # socket.io realtime relay (port 3003, sandbox/preview)
+│   └── realtime-worker/     # zero-dependency Cloudflare Worker + Durable Object (production)
 ├── supabase/                # migration guide + SQL schema
-└── scripts/                 # data migration & icon generation
+└── scripts/                 # data migration, icon generation, test suites
 ```
 
 ## Getting started
@@ -61,7 +63,7 @@ bun install        # or npm install
 
 ```bash
 cp .env.example .env
-# fill in JWT_SECRET + Supabase Postgres DATABASE_URL (see .env.example comments)
+# fill in AUTH_SECRET + Supabase Postgres DATABASE_URL (see .env.example comments)
 ```
 
 ### 3. Database
@@ -90,7 +92,8 @@ defines the WPM reference. Text ⇄ Morse conversion lives in `src/lib/morse.ts`
 ## Security model
 
 - **Sessions** — scrypt-hashed passwords, HS256 JWTs in httpOnly SameSite cookies (`secure` in production); `tokenVersion` invalidates every session on password change / sign-out-everywhere
-- **Realtime auth** — the socket relay rejects unauthenticated handshakes; clients present a short-lived signed socket token (`/api/socket/token`) verified with the same `AUTH_SECRET`
+- **Realtime auth** — the relay rejects unauthenticated handshakes; clients present a short-lived signed socket token (`/api/socket/token`) verified with the same `AUTH_SECRET`
+- **Room membership** — in production the realtime worker verifies conversation membership via a secret-guarded internal API before joining a room (fail-closed); server→relay broadcasts require a shared internal secret
 - **Brute force** — sliding-window rate limits: login 5/min per account + 10/min per IP, registration 5/min per IP (HTTP 429)
 - **Headers** — CSP, X-Frame-Options, nosniff, Referrer-Policy and Permissions-Policy on every route
 - **E2EE (beta, opt-in per conversation)** — ECDH P-256 key agreement, AES-GCM-256 payloads; the server only stores ciphertext and can never search it. No forward secrecy yet — the honest limitation list lives in [docs/SECURITY.md](docs/SECURITY.md)
@@ -100,9 +103,12 @@ defines the WPM reference. Text ⇄ Morse conversion lives in `src/lib/morse.ts`
 
 ```bash
 npm run lint                        # eslint
-npx tsc --noEmit                    # typecheck
+npx tsc --noEmit                    # typecheck (app + realtime worker)
 ./scripts/api-smoke-test.sh         # 22-step API flow against a running dev server
-bun scripts/socket-auth-test.mjs    # realtime handshake security
+bun scripts/socket-auth-test.mjs    # socket.io handshake security
+bun scripts/realtime-e2e-test.mjs   # full-stack: API → CF worker → live delivery (needs wrangler dev)
+bun mini-services/realtime-worker/tests/ws-relay-test.mjs        # relay suite (18 assertions)
+bun mini-services/realtime-worker/tests/membership-test.mjs      # room membership enforcement
 ```
 
 The smoke test creates two disposable `@morse.test` users, exercises auth → conversations → messages → receipts → keys → export, then deletes them. `scripts/cleanup-qa-users.ts` removes any leftovers.
@@ -115,7 +121,23 @@ The smoke test creates two disposable `@morse.test` users, exercises auth → co
 2. Set `DATABASE_URL` (Supabase session-pooler URI) and `AUTH_SECRET` (`openssl rand -base64 32`)
 3. Deploy — `prisma generate` runs automatically on install; push the schema once from any machine with DB access: `bunx prisma db push`
 
-> **Realtime note:** the socket.io relay needs a long-running process, so live typing/presence/instant delivery does not run on Vercel serverless — history syncs on refresh. Host `mini-services/chat-service` on Railway/Render/Fly and point clients at it for full realtime.
+### Realtime (zero-dependency Cloudflare Worker — free)
+
+The socket.io relay needs a long-running process, so production realtime runs on
+a **self-contained Cloudflare Worker + Durable Object** (~300 lines of first-party
+code, no npm packages, WebSocket Hibernation = free tier friendly):
+
+1. `cd mini-services/realtime-worker` — full guide in [its README](mini-services/realtime-worker/README.md)
+2. `bunx wrangler secret put AUTH_SECRET` (same value as the app) and `INTERNAL_SECRET`, then `bunx wrangler deploy`
+3. In Vercel set `NEXT_PUBLIC_REALTIME_WS`, `SOCKET_INTERNAL_URL`, `SOCKET_INTERNAL_SECRET` (values in the worker README)
+
+Verified by a 3-layer test matrix (relay suite, membership enforcement suite,
+full-stack E2E) — 45+ assertions covering auth, isolation, presence, receipts
+and live delivery.
+
+**Fallback:** without those env vars the app degrades gracefully — sandbox mode
+uses the socket.io mini-service, and without any relay new messages sync on
+refresh (persistence is always the source of truth).
 
 ## Roadmap
 

@@ -1,8 +1,13 @@
 // Morse Messenger — socket client + global helpers (flash overlay bus, formatting)
+// Two transports with an identical event contract:
+//   • socket.io bus (default: sandbox/preview via Caddy XTransformPort:3003)
+//   • self-contained reconnecting WebSocket to the zero-dependency Cloudflare
+//     realtime worker (enabled with NEXT_PUBLIC_REALTIME_WS — production path)
 
 import { useEffect } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useApp } from '@/lib/store'
+import { RealtimeSocket } from '@/lib/realtime-ws'
 import type { MessageDTO } from '@/lib/types'
 
 // ---------- light-flash event bus (screen signal channel) ----------
@@ -23,7 +28,11 @@ export function subscribeFlash(l: FlashListener): () => void {
 
 // ---------- socket hook ----------
 
-let shared: Socket | null = null
+// minimal transport interface — both socket.io and the CF WebSocket satisfy it
+let shared: { emit(event: string, data?: unknown): void } | null = null
+
+type Subscribe = (event: string, cb: (data: Record<string, unknown>) => void) => void
+type RegisterAll = (subscribe: Subscribe) => void
 
 export function useSocket() {
   const me = useApp((s) => s.me)
@@ -31,106 +40,128 @@ export function useSocket() {
   useEffect(() => {
     if (!me) return
     let cancelled = false
-    let lastAuthRetry = 0
-    let socket: Socket | null = null
 
-    const attach = (s: Socket) => {
-      s.on('connect', () => useApp.getState().setSocketConnected(true))
-      s.on('disconnect', () => useApp.getState().setSocketConnected(false))
-      s.on('connect_error', () => {
-        useApp.getState().setSocketConnected(false)
-        // the handshake token may have expired — refresh it and re-authenticate
-        // (guarded so a persistently failing socket cannot spam the API)
-        const now = Date.now()
-        if (now - lastAuthRetry > 60_000) {
-          lastAuthRetry = now
-          void fetch('/api/socket/token')
-            .then(async (r) => (r.ok ? ((await r.json()) as { token: string }) : null))
-            .then((data) => {
-              if (data?.token && socket) {
-                socket.auth = { token: data.token }
-                socket.connect()
-              }
-            })
-            .catch(() => undefined)
+    async function fetchToken(): Promise<string> {
+      try {
+        const res = await fetch('/api/socket/token')
+        if (res.ok) return ((await res.json()) as { token: string }).token
+      } catch {
+        /* realtime unavailable; the app still works via refresh */
+      }
+      return ''
+    }
+
+    // one handler set for both transports — the wire contract is identical
+    const registerAll: RegisterAll = (subscribe) => {
+      subscribe('presence', (d) => {
+        useApp.getState().setPresence(String(d.userId ?? ''), !!d.online)
+      })
+      subscribe('presence:sync', (d) => {
+        const online = Array.isArray(d.online) ? (d.online as string[]) : []
+        for (const id of online) useApp.getState().setPresence(String(id), true)
+      })
+      subscribe('message:new', (d) => {
+        void useApp.getState().applyMessageNew(String(d.conversationId ?? ''), d.message as MessageDTO)
+      })
+      subscribe('message:update', (d) => {
+        useApp.getState().applyMessageUpdate(String(d.conversationId ?? ''), d.message as MessageDTO)
+      })
+      subscribe('message:hidden', (d) => {
+        useApp.getState().applyMessageHidden(String(d.conversationId ?? ''), String(d.messageId ?? ''))
+      })
+      subscribe('receipt:update', (d) => {
+        useApp.getState().applyReceipt(String(d.conversationId ?? ''), String(d.messageId ?? ''), !!d.delivered, !!d.read)
+      })
+      subscribe('typing', (d) => {
+        const state = useApp.getState()
+        const userId = String(d.userId ?? '')
+        if (userId === me.id) return
+        const conversationId = String(d.conversationId ?? '')
+        state.setTyping(conversationId, d.isTyping ? String(d.displayName ?? '') : null)
+        if (d.isTyping) {
+          setTimeout(() => {
+            const cur = useApp.getState().typingIn[conversationId]
+            if (cur && Date.now() - cur.at > 4200) {
+              useApp.getState().setTyping(conversationId, null)
+            }
+          }, 4500)
         }
       })
-
-      s.on('presence', (data: { userId: string; online: boolean }) => {
-        useApp.getState().setPresence(data.userId, data.online)
-      })
-
-      s.on('message:new', (data: { conversationId: string; message: MessageDTO }) => {
-        void useApp.getState().applyMessageNew(data.conversationId, data.message)
-      })
-
-      s.on('message:update', (data: { conversationId: string; message: MessageDTO }) => {
-        useApp.getState().applyMessageUpdate(data.conversationId, data.message)
-      })
-
-      s.on('message:hidden', (data: { conversationId: string; messageId: string }) => {
-        useApp.getState().applyMessageHidden(data.conversationId, data.messageId)
-      })
-
-      s.on(
-        'receipt:update',
-        (data: { conversationId: string; messageId: string; delivered: boolean; read: boolean }) => {
-          useApp.getState().applyReceipt(data.conversationId, data.messageId, data.delivered, data.read)
-        }
-      )
-
-      s.on(
-        'typing',
-        (data: { conversationId: string; userId: string; displayName: string; isTyping: boolean }) => {
-          const state = useApp.getState()
-          if (data.userId === me.id) return
-          state.setTyping(data.conversationId, data.isTyping ? data.displayName : null)
-          if (data.isTyping) {
-            setTimeout(() => {
-              const cur = useApp.getState().typingIn[data.conversationId]
-              if (cur && Date.now() - cur.at > 4200) {
-                useApp.getState().setTyping(data.conversationId, null)
-              }
-            }, 4500)
-          }
-        }
-      )
-
-      s.on('conv:new', () => {
+      subscribe('conv:new', () => {
         void useApp.getState().loadConversations()
       })
-
-      s.on('conv:update', () => {
+      subscribe('conv:update', () => {
         void useApp.getState().loadConversations()
       })
     }
 
-    void (async () => {
-      // realtime needs a signed socket token — the httpOnly session cookie cannot be read here
-      let token = ''
-      try {
-        const res = await fetch('/api/socket/token')
-        if (res.ok) token = ((await res.json()) as { token: string }).token
-      } catch {
-        /* realtime unavailable; the app still works via refresh */
-      }
-      if (cancelled) return
+    let cleanup: () => void
 
-      socket = io('/?XTransformPort=3003', {
-        path: '/',
-        auth: { token },
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-      })
-      shared = socket
-      attach(socket)
-    })()
+    if (process.env.NEXT_PUBLIC_REALTIME_WS) {
+      // ---------- production transport: zero-dependency CF WebSocket ----------
+      const rt = new RealtimeSocket(
+        process.env.NEXT_PUBLIC_REALTIME_WS,
+        fetchToken,
+        (connected) => useApp.getState().setSocketConnected(connected)
+      )
+      registerAll((event, cb) => rt.on(event, cb))
+      rt.connect()
+      shared = rt
+      cleanup = () => rt.close()
+    } else {
+      // ---------- sandbox/preview transport: socket.io via Caddy ----------
+      let socket: Socket | null = null
+      let lastAuthRetry = 0
+
+      const attach = (s: Socket) => {
+        s.on('connect', () => useApp.getState().setSocketConnected(true))
+        s.on('disconnect', () => useApp.getState().setSocketConnected(false))
+        s.on('connect_error', () => {
+          useApp.getState().setSocketConnected(false)
+          // the handshake token may have expired — refresh it and re-authenticate
+          // (guarded so a persistently failing socket cannot spam the API)
+          const now = Date.now()
+          if (now - lastAuthRetry > 60_000) {
+            lastAuthRetry = now
+            void fetch('/api/socket/token')
+              .then(async (r) => (r.ok ? ((await r.json()) as { token: string }) : null))
+              .then((data) => {
+                if (data?.token && socket) {
+                  socket.auth = { token: data.token }
+                  socket.connect()
+                }
+              })
+              .catch(() => undefined)
+          }
+        })
+        registerAll((event, cb) => s.on(event, cb as (...args: unknown[]) => void))
+      }
+
+      void (async () => {
+        // realtime needs a signed socket token — the httpOnly session cookie cannot be read here
+        const token = await fetchToken()
+        if (cancelled) return
+
+        socket = io('/?XTransformPort=3003', {
+          path: '/',
+          auth: { token },
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+        })
+        attach(socket)
+        shared = socket
+      })()
+
+      cleanup = () => {
+        socket?.disconnect()
+        useApp.getState().setSocketConnected(false)
+      }
+    }
 
     return () => {
       cancelled = true
-      socket?.disconnect()
+      cleanup()
       shared = null
-      useApp.getState().setSocketConnected(false)
     }
   }, [me?.id])
 }

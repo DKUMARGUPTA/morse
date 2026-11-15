@@ -179,6 +179,8 @@ export async function POST(req: NextRequest) {
         members: { create: [{ userId: me.id }, { userId }] },
       },
     })
+    // both sides (and the creator's other devices) refresh their conversation list
+    emitToRoom(userRoom(me.id), 'conv:new', { conversationId: conv.id })
     emitToRoom(userRoom(userId), 'conv:new', { conversationId: conv.id })
     return ok({ conversationId: conv.id, reused: false })
   } catch {
