@@ -16,6 +16,7 @@ import type {
 import type { Lang, DictKey } from '@/lib/i18n'
 import { t } from '@/lib/i18n'
 import { decryptText, encryptText, publishPublicKey } from '@/lib/e2ee'
+import { playChime, vibrate } from '@/lib/notification-sound'
 
 export type Tab = 'chats' | 'morse' | 'learn' | 'settings'
 
@@ -67,7 +68,7 @@ interface AppState {
   loadConversations: () => Promise<void>
   openConversation: (id: string) => Promise<void>
   /** refetch one conversation's messages (used for oversized realtime stubs) */
-  reloadConversation: (id: string) => Promise<void>
+  reloadConversation: (id: string, opts?: { skipListRefresh?: boolean }) => Promise<void>
   closeConversation: () => void
   startConversationWith: (userId: string) => Promise<string | null>
   sendMessage: (text: string, sendMode: SendMode, playMode: PlayMode | null) => Promise<boolean>
@@ -213,12 +214,61 @@ export const useApp = create<AppState>((set, get) => ({
 
   loadConversations: async () => {
     try {
+      // prev list is the diff baseline: whatever changed server-side since the
+      // last fetch is treated as "arrived just now" (drives sound + open-chat
+      // refresh even when realtime transport is down)
+      const prev = get().conversations
       const res = await fetch('/api/conversations')
       if (!res.ok) return
       const data = await res.json()
-      set({ conversations: data.conversations, conversationsLoaded: true })
+      const next = data.conversations as ConversationDTO[]
+      set((s) => ({
+        conversations: next.map((c) => (c.id === s.activeId ? { ...c, unreadCount: 0 } : c)),
+        conversationsLoaded: true,
+      }))
+
+      // ---- diff prev vs next: detect freshly arrived messages ----
+      const me = get().me
+      const settings = get().settings
+      const activeId = get().activeId
+      if (me && prev.length > 0) {
+        const prevMap = new Map(prev.map((c) => [c.id, c]))
+        for (const c of next) {
+          const p = prevMap.get(c.id)
+          const lastId = c.lastMessage?.id ?? null
+          const prevLastId = p?.lastMessage?.id ?? null
+          if (!p || lastId === prevLastId || !c.lastMessage) continue
+
+          const incoming =
+            c.lastMessage.senderId !== me.id && c.lastMessage.kind !== 'system' && !c.muted
+          if (incoming) {
+            const preview = c.lastMessage.encrypted
+              ? (get().e2eeTexts[c.lastMessage.id] ?? '···')
+              : c.lastMessage.text
+            const senderName = c.isGroup
+              ? (c.members.find((m) => m.id === c.lastMessage!.senderId)?.displayName ?? c.name ?? '')
+              : (c.peer?.displayName ?? c.name ?? '')
+            if (c.id !== activeId) {
+              get().addNotification({
+                type: 'message',
+                titleKey: 'notifNewMessage',
+                body: `${senderName}: ${(preview || '···').slice(0, 60)}`,
+                conversationId: c.id,
+              })
+            }
+            if (settings?.soundEnabled) playChime(settings.volume)
+            if (settings?.vibrationEnabled) vibrate(60)
+          }
+          // open conversation changed (either direction) — pull the messages so
+          // the visible chat updates itself without a manual refresh
+          if (c.id === activeId) {
+            void get().reloadConversation(c.id, { skipListRefresh: true })
+          }
+        }
+      }
+
       // decrypt E2EE previews so the list never shows stale ciphertext locks
-      const previews = (data.conversations as ConversationDTO[])
+      const previews = next
         .map((c) => (c.lastMessage ? { ...c.lastMessage, conversationId: c.id } : null))
         .filter((m): m is NonNullable<typeof m> => !!m && m.encrypted)
       if (previews.length > 0) void get().decryptMessages(previews)
@@ -245,7 +295,7 @@ export const useApp = create<AppState>((set, get) => ({
     }
   },
 
-  reloadConversation: async (id) => {
+  reloadConversation: async (id, opts) => {
     if (!id) return
     try {
       const res = await fetch(`/api/conversations/${id}`)
@@ -253,7 +303,7 @@ export const useApp = create<AppState>((set, get) => ({
       const data = await res.json()
       set((s) => ({ messages: { ...s.messages, [id]: data.messages } }))
       void get().decryptMessages(data.messages)
-      void get().loadConversations()
+      if (!opts?.skipListRefresh) void get().loadConversations()
     } catch {
       // network error — next realtime event or refresh recovers
     }
@@ -431,19 +481,23 @@ export const useApp = create<AppState>((set, get) => ({
           )
         : s.conversations,
     }))
-    if (activeId !== conversationId && !isMine && !conv?.muted && message.kind !== 'system') {
-      get().addNotification({
-        type: 'message',
-        titleKey: 'notifNewMessage',
-        body: `${message.senderName}: ${(preview || '...').slice(0, 60)}`,
-        conversationId,
-      })
-      if (get().settings?.soundEnabled) void playChime()
-      if (get().settings?.vibrationEnabled) {
-        try { navigator.vibrate?.(60) } catch { /* noop */ }
+    if (!isMine && !conv?.muted && message.kind !== 'system') {
+      const settings = get().settings
+      // bell entry only for background conversations — the open chat shows the
+      // message itself, an extra notification would just be noise
+      if (activeId !== conversationId) {
+        get().addNotification({
+          type: 'message',
+          titleKey: 'notifNewMessage',
+          body: `${message.senderName}: ${(preview || '...').slice(0, 60)}`,
+          conversationId,
+        })
+        // refresh list in case conversation is new
+        void get().loadConversations()
       }
-      // refresh list in case conversation is new
-      void get().loadConversations()
+      // sound + vibration for BOTH background and open conversations
+      if (settings?.soundEnabled) playChime(settings.volume)
+      if (settings?.vibrationEnabled) vibrate(60)
     }
     if (activeId === conversationId && !isMine) {
       void fetch(`/api/conversations/${conversationId}/read`, { method: 'POST' })
@@ -711,27 +765,3 @@ export const useApp = create<AppState>((set, get) => ({
 
   setActiveInvite: (code) => set({ activeInvite: code }),
 }))
-
-/** short pleasant two-tone chime for in-app notifications */
-export function playChime() {
-  try {
-    const Ctx = window.AudioContext
-    const ctx = new Ctx()
-    const t0 = ctx.currentTime
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.type = 'sine'
-    osc.frequency.setValueAtTime(880, t0)
-    osc.frequency.setValueAtTime(1174.66, t0 + 0.09)
-    gain.gain.setValueAtTime(0.0001, t0)
-    gain.gain.exponentialRampToValueAtTime(0.18, t0 + 0.02)
-    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.28)
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    osc.start(t0)
-    osc.stop(t0 + 0.3)
-    setTimeout(() => void ctx.close(), 500)
-  } catch {
-    /* audio unavailable */
-  }
-}

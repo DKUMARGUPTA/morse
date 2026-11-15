@@ -9,6 +9,7 @@ import { io, Socket } from 'socket.io-client'
 import { useApp } from '@/lib/store'
 import { RealtimeSocket } from '@/lib/realtime-ws'
 import { SupabaseRealtimeSocket } from '@/lib/supabase-realtime'
+import { startPolling, stopPolling } from '@/lib/poller'
 import type { MessageDTO } from '@/lib/types'
 
 // ---------- light-flash event bus (screen signal channel) ----------
@@ -109,6 +110,11 @@ export function useSocket() {
 
     let cleanup: () => void
 
+    // The poller runs in EVERY mode as a safety net: it self-skips while a
+    // realtime transport is connected, and quietly keeps messages + sounds
+    // flowing whenever the transport is missing or disconnected.
+    startPolling()
+
     if (process.env.NEXT_PUBLIC_REALTIME_WS) {
       // ---------- production transport A: zero-dependency CF WebSocket ----------
       useApp.getState().setSocketAvailable(true)
@@ -199,6 +205,7 @@ export function useSocket() {
     return () => {
       cancelled = true
       cleanup()
+      stopPolling()
       shared = null
     }
   }, [me?.id])

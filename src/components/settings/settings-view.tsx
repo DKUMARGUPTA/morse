@@ -11,6 +11,7 @@ import { Avatar, SectionCard } from '@/components/shared'
 import { useApp } from '@/lib/store'
 import { useSignalPlayer } from '@/hooks/use-signal-player'
 import { canVibrate } from '@/lib/signal-engine'
+import { playChime } from '@/lib/notification-sound'
 import { keyFingerprint, publishPublicKey, resetLocalKeypair } from '@/lib/e2ee'
 import { cn } from '@/lib/utils'
 import { PwaInstallSection } from '@/components/pwa/pwa-install'
@@ -155,6 +156,13 @@ export function SettingsView() {
               checked={settings.vibrationEnabled}
               onChange={(v) => void updateSettings({ vibrationEnabled: v })}
             />
+            <button
+              onClick={() => playChime(settings.volume, true)}
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#1E2C4F] text-sm text-[#C9D6F2] hover:border-[#22D3EE]/50 hover:text-[#22D3EE]"
+            >
+              {tr('testSound')}
+            </button>
+            <p className="text-[11px] text-[#8CA3C7]">{tr('testSoundNote')}</p>
           </div>
         </SectionCard>
 

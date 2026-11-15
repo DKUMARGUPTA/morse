@@ -5,6 +5,7 @@
 import { useEffect } from 'react'
 import { useApp } from '@/lib/store'
 import { useSocket } from '@/lib/socket'
+import { primeAudio } from '@/lib/notification-sound'
 import { AuthView } from '@/components/auth-view'
 import { MainShell } from '@/components/main-shell'
 import { LightOverlay } from '@/components/shared'
@@ -18,6 +19,9 @@ export default function App() {
   const setActiveInvite = useApp((s) => s.setActiveInvite)
 
   useEffect(() => {
+    // unlock Web Audio on the first user gesture — required on mobile for
+    // notification chimes to be audible later
+    primeAudio()
     void useApp.getState().loadSession()
   }, [])
 
