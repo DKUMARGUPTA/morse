@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: 794px 1123px; margin: 0; }
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  .cover-page {
+    position: relative;
+    width: 794px; height: 1123px;
+    background: #ffffff;
+    font-family: 'FreeSerif', Georgia, 'Times New Roman', serif;
+    border: none; outline: none; box-shadow: none;
+  }
+  /* Layer 1 — background grid (2% opacity) */
+  .layer1 { position: absolute; inset: 0; overflow: hidden; z-index: 1; }
+  .layer1 .grid {
+    position: absolute; inset: 0;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(93,86,67,0.05) 0 0.5px, transparent 0.5px 66px),
+      repeating-linear-gradient(90deg, rgba(93,86,67,0.05) 0 0.5px, transparent 0.5px 66px);
+  }
+  /* Layer 2 — thick vertical anchor line at 0.12W */
+  .layer2 { position: absolute; inset: 0; z-index: 2; }
+  .anchor-line {
+    position: absolute;
+    left: 88px; top: 112px; bottom: 112px;
+    width: 6px; background: #5d5643;
+  }
+  /* Layer 3 — content, left edge = 0.12W + 30pt ≈ 135px */
+  .layer3 { position: absolute; inset: 0; z-index: 3; color: #1b1a18; }
+  .kicker {
+    position: absolute; left: 135px; top: 168px;
+    font-size: 16pt; letter-spacing: 3pt; opacity: 0.6;
+    text-transform: uppercase; max-width: 560px;
+  }
+  .hero {
+    position: absolute; left: 135px; top: 320px;
+    font-size: 56pt; font-weight: 900; line-height: 1.15;
+    max-width: 580px; color: #1b1a18;
+  }
+  .hero .accent { color: #5d5643; }
+  .summary {
+    position: absolute; left: 135px; top: 600px;
+    font-size: 16pt; line-height: 1.6; opacity: 0.85;
+    max-width: 476px;
+  }
+  .meta {
+    position: absolute; left: 135px; top: 852px;
+    font-size: 16pt; line-height: 1.7; opacity: 0.9;
+  }
+  .meta .label { color: #7d7a73; }
+  .footer {
+    position: absolute; left: 135px; top: 1010px;
+    font-size: 16pt; letter-spacing: 3pt; opacity: 0.6;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+<div class="cover-page">
+  <div class="layer1"><div class="grid"></div></div>
+  <div class="layer2"><div class="anchor-line"></div></div>
+  <div class="layer3">
+    <div class="kicker">Security Audit and Testing Report</div>
+    <div class="hero">MORSE<br><span class="accent">MESSENGER</span></div>
+    <div class="summary">
+      Full-cycle quality pass: 22-check API suite, realtime handshake security,
+      a ten-finding code audit with all critical fixes shipped, and live
+      production verification on Vercel with Supabase Postgres.
+    </div>
+    <div class="meta">
+      <span class="label">Commit</span>&nbsp; 6383174 · main<br>
+      <span class="label">Deployment</span>&nbsp; morse-ashen.vercel.app<br>
+      <span class="label">Date</span>&nbsp; November 2026
+    </div>
+    <div class="footer">github.com/dkumargupta/morse</div>
+  </div>
+</div>
+</body>
+</html>
