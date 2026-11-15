@@ -1,0 +1,178 @@
+// Morse Messenger — PostgreSQL variant of the schema for Supabase.
+// Prisma does not allow switching providers via env, so this file mirrors
+// prisma/schema.prisma 1:1 with provider = "postgresql".
+//
+// MIGRATION (see supabase/MIGRATION.md):
+//   1. SUPABASE_DATABASE_URL="postgres://..." bunx prisma db push --schema prisma/schema.postgres.prisma
+//   2. bun scripts/migrate-to-supabase.ts      (copies the SQLite demo data)
+//   3. Swap the app over: DATABASE_URL=<supabase-url> and change provider in
+//      prisma/schema.prisma to "postgresql" (fields are identical).
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/postgres-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("SUPABASE_DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  displayName  String
+  avatarColor  String   @default("#22D3EE")
+  tokenVersion Int      @default(0)
+  // E2EE (beta): ECDH P-256 public key serialized as JWK JSON. Private keys never leave the device.
+  publicKey    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  settings         UserSettings?
+  memberships      ConversationMember[]
+  messages         Message[]
+  receipts         MessageReceipt[]
+  invitationsMade  Invitation[]         @relation("InvitationCreator")
+  learningProgress LearningProgress[]
+  dailyPractice    DailyPractice[]
+  blocksMade       Block[]              @relation("Blocker")
+  blocksReceived   Block[]              @relation("Blocked")
+  reportsMade      Report[]             @relation("Reporter")
+  reportsReceived  Report[]             @relation("Reported")
+}
+
+model UserSettings {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  language         String   @default("en") // en | hi
+  readReceipts     Boolean  @default(true)
+  soundEnabled     Boolean  @default(true)
+  vibrationEnabled Boolean  @default(true)
+  wpm              Int      @default(12)
+  frequency        Int      @default(600)
+  volume           Int      @default(70) // 0 - 100
+  updatedAt        DateTime @updatedAt
+}
+
+model Conversation {
+  id          String   @id @default(cuid())
+  isGroup     Boolean  @default(false)
+  name        String? // group title (groups only)
+  createdBy   String?
+  e2eeEnabled Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members  ConversationMember[]
+  messages Message[]
+}
+
+model ConversationMember {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @default("member") // owner | member (groups)
+  pinned         Boolean      @default(false)
+  muted          Boolean      @default(false)
+  lastReadAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  kind           String       @default("text") // text | morse | system
+  text           String
+  morse          String?
+  encrypted      Boolean      @default(false)
+  sendMode       String? // text | morse | dual  (sender's chosen mode)
+  playMode       String? // sound | light | vibration (sender's suggested channel)
+  replyToId      String?
+  replyTo        Message?     @relation("ReplyTo", fields: [replyToId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  replies        Message[]    @relation("ReplyTo")
+  createdAt      DateTime     @default(now())
+  editedAt       DateTime?
+
+  receipts MessageReceipt[]
+
+  @@index([conversationId, createdAt])
+}
+
+model MessageReceipt {
+  id          String    @id @default(cuid())
+  messageId   String
+  message     Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveredAt DateTime?
+  readAt      DateTime?
+  hidden      Boolean   @default(false) // "delete for self"
+
+  @@unique([messageId, userId])
+  @@index([userId])
+}
+
+model Invitation {
+  id           String    @id @default(cuid())
+  code         String    @unique
+  createdById  String
+  creator      User      @relation("InvitationCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  acceptedById String?
+  status       String    @default("pending") // pending | accepted | declined | revoked
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+}
+
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String
+  blocker   User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  reporterId String
+  reporter   User     @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedId String
+  reported   User     @relation("Reported", fields: [reportedId], references: [id], onDelete: Cascade)
+  reason     String
+  createdAt  DateTime @default(now())
+}
+
+model LearningProgress {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  character       String
+  correct         Int       @default(0)
+  wrong           Int       @default(0)
+  lastPracticedAt DateTime?
+
+  @@unique([userId, character])
+}
+
+model DailyPractice {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date   String // yyyy-mm-dd
+  count  Int    @default(0)
+
+  @@unique([userId, date])
+}
