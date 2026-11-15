@@ -1,6 +1,6 @@
-// One-off maintenance: remove QA test users (email like qa-*@morse.test) left by test runs.
+// One-off maintenance: remove QA test users (email like *@morse.test) left by test runs.
 // Usage: bun scripts/cleanup-qa-users.ts
-import { PrismaClient } from '../generated/postgres-client'
+import { PrismaClient } from '@prisma/client'
 
 const db = new PrismaClient()
 
