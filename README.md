@@ -7,11 +7,17 @@
 
 **Chat normally. Talk in Morse.** — A global chat platform with built-in Morse code communication: convert any message to Morse and send it through **sound, screen light or vibration**, practice with an interactive tutor, and chat in a familiar messaging UI.
 
+**:globe_with_meridians: Live app: [morse-ashen.vercel.app](https://morse-ashen.vercel.app)** — installable as a PWA on Android, iOS and desktop.
+
+![Morse Messenger chat — E2EE conversation with Text / Morse / Dual display modes](docs/screenshots/chat-desktop.png)
+
 > MVP build of the Morse Messenger PRD v1.0.
 
 ## Features
 
 - **Familiar chat** — 1:1 conversations via invite links + QR codes, real-time delivery with typing indicators, read receipts, unread badges
+- **Reliable delivery** — realtime push with an automatic polling safety net: if the socket transport is ever down, messages still arrive (and chime) within seconds — no manual refresh
+- **Notification sounds** — audible chime + vibration for incoming messages (open or background chats), unlocked on first tap for mobile browsers; test button in Settings
 - **Morse composer** — every message can be composed in three modes: Text / Morse / Dual (side-by-side preview)
 - **Signal channels** — transmit Morse via Web Audio tones, screen-light overlay (for cameras/optics), or device vibration; graceful capability detection and fallbacks
 - **Telegraph key** — a real straight-key style input: press timing translates directly into dots and dashes
@@ -149,12 +155,20 @@ full-stack E2E for both transports) — 75+ assertions covering auth, isolation,
 membership, receipts, typing and live delivery.
 
 **Fallback:** without any transport configured the app degrades gracefully —
-the status pill shows "Realtime off" honestly, and new messages sync on
-refresh (persistence is always the source of truth).
+the status pill shows "Realtime off" honestly, and a visibility-gated polling
+safety net keeps new messages (and notification sounds) flowing every few
+seconds (persistence is always the source of truth). The poller runs in every
+mode and self-skips while the realtime transport is healthy — zero extra
+requests when live.
 
 ## Roadmap
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) — Signal-style ratcheting, disappearing messages, offline-first sync, group E2EE and more.
+See [docs/ROADMAP.md](docs/ROADMAP.md) — Web Push notifications (P0), default-on E2EE, Signal-style ratcheting, disappearing messages, media/voice notes and more.
+
+## Contributing
+
+Issues and PRs are welcome! For big changes, open an issue first. Useful
+commands: `npm run lint`, `npx tsc --noEmit`, `./scripts/api-smoke-test.sh`.
 
 ## License
 

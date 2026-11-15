@@ -5,11 +5,16 @@ Priorities are informed by what the mature private messengers do well — Signal
 performance), SimpleX (no user IDs, link/QR-based contact establishment) and
 the offline-first PWA pattern (IndexedDB + Background Sync).
 
-## P0 — trust and portability (next)
+## P0 — trust, portability and reachability (next)
+- **Web Push notifications** — the messenger currently only makes sound/vibration while the app is open. Add VAPID-keyed Web Push (service worker `push` handler + stored subscriptions) so messages reach users when the app is closed — this is the single biggest UX gap on mobile.
 - **Default-on E2EE for new 1:1 conversations** — encrypted-by-default like Signal; keep the toggle for groups.
 - **Disappearing messages** — per-conversation TTL (24h / 7d / 90d), enforced at read time, cleaned by a periodic job.
-- **Hosted realtime** — package `mini-services/chat-service` for Railway/Render/Fly so Vercel deployments get live delivery, presence and typing.
 - **QR-code contact invitations** — the `qrcode` dependency is already present; render invite codes as scannable QR (SimpleX-style connection).
+
+> Done previously: **hosted realtime** (Supabase broadcast transport is live in
+> production; the Cloudflare Worker remains the stricter upgrade path) and the
+> **Vercel-native polling fallback** (visibility-gated poller that self-skips
+> while realtime is healthy).
 
 ## P1 — stronger encryption
 - **Signal-style Double Ratchet** (X3DH + ratcheting) for forward secrecy and post-compromise security.
@@ -21,16 +26,18 @@ the offline-first PWA pattern (IndexedDB + Background Sync).
 - **IndexedDB message cache** — instant conversation open, offline history browsing.
 - **Background send queue** — messages composed offline are sent on reconnect (Background Sync API).
 - **Local encrypted search** — search decrypted history in a Web Worker.
-- **Vercel-native fallback** — lightweight polling mode when the relay is unreachable, with an explicit "live" indicator (exists) and auto-resync.
+- **Vercel-native fallback** — lightweight polling mode when the relay is unreachable, with an explicit "live" indicator (exists) and auto-resync. **Done** — `src/lib/poller.ts` (5s, visibility-gated, self-skips while realtime is connected; also drives notification sounds and open-chat auto-refresh).
 
 ## P3 — growth features
-- Web Push notifications (service worker is already registered).
-- Encrypted media and voice notes (binary E2EE pipeline).
+- Message reactions and forwarding (standard chat UX both are absent).
+- Voice notes and encrypted media (binary E2EE pipeline) — the most-requested feature in comparable open-source messengers.
+- Koch-method / Farnsworth-spacing learning path in Learn mode (the CW-community standard: full-speed audio from lesson one, characters added one by one).
 - Optional 2FA (TOTP) on login.
 - Voice/video calls (needs TURN infra — evaluate after realtime hosting).
 - Metadata minimization (SimpleX-style anonymous invite routing).
 
 ## Engineering hygiene (ongoing)
 - Replace the in-memory rate limiter with a shared store when scaling beyond one region.
+- Add unit tests (vitest + jsdom) for the store-level diff/sound logic and the poller; CI currently only lints + typechecks (a production build step was added after a build env mismatch nearly slipped through).
 - Add CI coverage for the E2EE round-trip (encrypt → decrypt in headless browser).
 - Structured logging + error tracking (e.g. Sentry) for the API routes.

@@ -17,3 +17,7 @@ jobs:
       - run: bunx tsc --noEmit
       # realtime worker typecheck (self-contained tsconfig)
       - run: bunx tsc --noEmit -p mini-services/realtime-worker/tsconfig.json
+      # production build — catches page-data/env errors that typecheck cannot
+      - run: bun run build
+        env:
+          AUTH_SECRET: ci-build-secret
