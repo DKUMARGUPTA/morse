@@ -29,7 +29,7 @@ async function api(method, path, { cookie, body, secret } = {}) {
       'content-type': 'application/json',
       ...(cookie ? { cookie } : {}),
       ...(secret ? { 'x-internal-secret': secret } : {}),
-      'x-forwarded-for': '10.77.8.8',
+      'x-forwarded-for': `10.${1 + Math.floor(Math.random() * 250)}.${1 + Math.floor(Math.random() * 250)}.${1 + Math.floor(Math.random() * 250)}`, // random per run: repeated runs must not trip register/login rate limits
     },
     body: body ? JSON.stringify(body) : undefined,
   })

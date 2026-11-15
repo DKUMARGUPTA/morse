@@ -142,6 +142,9 @@ export const useApp = create<AppState>((set, get) => ({
 
   loadSession: async () => {
     try {
+      // fire the conversations fetch in parallel with /api/auth/me — it only
+      // needs the session cookie, so the list is ready one RTT earlier
+      const conversationsPromise = get().loadConversations()
       const res = await fetch('/api/auth/me')
       const data = await res.json()
       // handle ?invite=CODE links (PRD 5.2)
@@ -160,7 +163,7 @@ export const useApp = create<AppState>((set, get) => ({
           displayModes: loadDisplayModes(),
           ...(code ? { activeInvite: code } : {}),
         })
-        void get().loadConversations()
+        await conversationsPromise
         void publishPublicKey().then(() => get().loadPeerKeys())
       } else {
         set({

@@ -34,29 +34,30 @@ export function isResponse(x: unknown): x is NextResponse {
  *  until the fetches flush — a bare fire-and-forget fetch would be frozen
  *  mid-flight when the handler returns. */
 export function emitToRoom(room: string, event: string, data: unknown) {
-  const internalUrl = process.env.SOCKET_INTERNAL_URL || 'http://127.0.0.1:3004/internal/emit'
-  const internalHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (process.env.SOCKET_INTERNAL_SECRET) internalHeaders['x-internal-secret'] = process.env.SOCKET_INTERNAL_SECRET
-
+  const internalUrl = process.env.SOCKET_INTERNAL_URL
   const sbUrl = process.env.SUPABASE_URL
   const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const sbBody = sbUrl && sbKey ? buildSupabaseBody(room, event, data) : null
 
+  // build every target up front; fire them all together inside after()
+  const targets: { url: string; headers: Record<string, string>; body: string }[] = []
+
+  if (process.env.NODE_ENV === 'development') {
+    // dev: always feed the local socket.io bridge so preview clients stay live
+    targets.push({ url: 'http://127.0.0.1:3004/internal/emit', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room, event, data }) })
+  }
+  if (internalUrl) {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (process.env.SOCKET_INTERNAL_SECRET) headers['x-internal-secret'] = process.env.SOCKET_INTERNAL_SECRET
+    targets.push({ url: internalUrl, headers, body: JSON.stringify({ room, event, data }) })
+  }
+  if (sbUrl && sbKey && sbBody) {
+    targets.push({ url: `${sbUrl}/realtime/v1/api/broadcast`, headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`, 'Content-Type': 'application/json' }, body: sbBody })
+  }
+
   const run = () => {
-    fetch(internalUrl, {
-      method: 'POST',
-      headers: internalHeaders,
-      body: JSON.stringify({ room, event, data }),
-    }).catch(() => {
-      // realtime is best-effort; persistence is the source of truth
-    })
-    if (sbUrl && sbKey && sbBody) {
-      fetch(`${sbUrl}/realtime/v1/api/broadcast`, {
-        method: 'POST',
-        headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`, 'Content-Type': 'application/json' },
-        body: sbBody,
-        signal: AbortSignal.timeout(4000),
-      }).catch(() => {
+    for (const t of targets) {
+      fetch(t.url, { method: 'POST', headers: t.headers, body: t.body, signal: AbortSignal.timeout(4000) }).catch(() => {
         // realtime is best-effort; persistence is the source of truth
       })
     }
