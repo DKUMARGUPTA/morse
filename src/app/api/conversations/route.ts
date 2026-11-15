@@ -1,10 +1,13 @@
 import { NextRequest } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { emitToRoom, fail, isResponse, ok, requireUser, userRoom } from '@/lib/api-helpers'
 
 const userSelect = { id: true, displayName: true, avatarColor: true } as const
 
-/** GET /api/conversations — list with peer/group info, last message, unread count, block state */
+/** GET /api/conversations — list with peer/group info, last message, unread count, block state.
+ *  Last message + unread count are fetched in 2 batched raw queries (DISTINCT ON /
+ *  GROUP BY) instead of 2N roundtrips — this endpoint used to dominate app load time. */
 export async function GET() {
   const me = await requireUser()
   if (isResponse(me)) return me
@@ -26,6 +29,34 @@ export async function GET() {
     select: { messageId: true },
   })
   const hiddenIds = hidden.map((h) => h.messageId)
+
+  // ---- batched last-message + unread counts (2 queries for ALL conversations) ----
+  type LastRow = { conversationId: string; id: string; kind: string; text: string; morse: string | null; encrypted: boolean; senderId: string; createdAt: Date }
+  let lastRows: LastRow[] = []
+  let unreadRows: { conversationId: string; unread: bigint }[] = []
+  if (convIds.length > 0) {
+    const hiddenFilter = hiddenIds.length ? Prisma.sql`AND m.id NOT IN (${Prisma.join(hiddenIds)})` : Prisma.empty
+    ;[lastRows, unreadRows] = await Promise.all([
+      db.$queryRaw<LastRow[]>(Prisma.sql`
+        SELECT DISTINCT ON ("conversationId") "conversationId", id, kind, text, morse, encrypted, "senderId", "createdAt"
+        FROM "Message"
+        WHERE "conversationId" IN (${Prisma.join(convIds)}) ${hiddenFilter}
+        ORDER BY "conversationId", "createdAt" DESC`),
+      db.$queryRaw<{ conversationId: string; unread: bigint }[]>(Prisma.sql`
+        SELECT cm."conversationId", COUNT(m.id) AS unread
+        FROM "ConversationMember" cm
+        LEFT JOIN "Message" m
+          ON m."conversationId" = cm."conversationId"
+         AND m."senderId" <> cm."userId"
+         AND m.kind <> 'system'
+         AND (cm."lastReadAt" IS NULL OR m."createdAt" > cm."lastReadAt")
+         AND m.id NOT IN (SELECT mr."messageId" FROM "MessageReceipt" mr WHERE mr."userId" = ${me.id} AND mr.hidden = true)
+        WHERE cm."userId" = ${me.id}
+        GROUP BY cm."conversationId"`),
+    ])
+  }
+  const lastByConv = new Map(lastRows.map((r) => [r.conversationId, r]))
+  const unreadByConv = new Map(unreadRows.map((r) => [r.conversationId, Number(r.unread)]))
 
   const result: Array<{
     id: string
@@ -60,20 +91,8 @@ export async function GET() {
       blockedMe = blocks.some((b) => b.blockerId === peer!.id && b.blockedId === me.id)
     }
 
-    const lastMessage = await db.message.findFirst({
-      where: { conversationId: conv.id, id: { notIn: hiddenIds } },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, kind: true, text: true, morse: true, encrypted: true, senderId: true, createdAt: true },
-    })
-    const unreadCount = await db.message.count({
-      where: {
-        conversationId: conv.id,
-        senderId: { not: me.id },
-        kind: { not: 'system' },
-        id: { notIn: hiddenIds },
-        ...(m.lastReadAt ? { createdAt: { gt: m.lastReadAt } } : {}),
-      },
-    })
+    const lm = lastByConv.get(conv.id)
+    const unreadCount = unreadByConv.get(conv.id) ?? 0
 
     result.push({
       id: conv.id,
@@ -84,9 +103,9 @@ export async function GET() {
       myRole: m.role === 'owner' ? 'owner' : 'member',
       e2eeEnabled: conv.e2eeEnabled,
       createdAt: conv.createdAt.toISOString(),
-      updatedAt: (lastMessage?.createdAt ?? conv.updatedAt).toISOString(),
-      lastMessage: lastMessage
-        ? { ...lastMessage, createdAt: lastMessage.createdAt.toISOString() }
+      updatedAt: (lm?.createdAt ?? conv.updatedAt).toISOString(),
+      lastMessage: lm
+        ? { id: lm.id, kind: lm.kind, text: lm.text, morse: lm.morse, encrypted: lm.encrypted, senderId: lm.senderId, createdAt: lm.createdAt.toISOString() }
         : null,
       unreadCount,
       blockedByMe,
