@@ -8,6 +8,7 @@ import { useEffect } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useApp } from '@/lib/store'
 import { RealtimeSocket } from '@/lib/realtime-ws'
+import { SupabaseRealtimeSocket } from '@/lib/supabase-realtime'
 import type { MessageDTO } from '@/lib/types'
 
 // ---------- light-flash event bus (screen signal channel) ----------
@@ -61,10 +62,21 @@ export function useSocket() {
         for (const id of online) useApp.getState().setPresence(String(id), true)
       })
       subscribe('message:new', (d) => {
-        void useApp.getState().applyMessageNew(String(d.conversationId ?? ''), d.message as MessageDTO)
+        const msg = d.message as MessageDTO | undefined
+        if (msg?.id) {
+          void useApp.getState().applyMessageNew(String(d.conversationId ?? ''), msg)
+        } else {
+          // oversized broadcast came through as a stub — refetch the conversation
+          void useApp.getState().reloadConversation(String(d.conversationId ?? ''))
+        }
       })
       subscribe('message:update', (d) => {
-        useApp.getState().applyMessageUpdate(String(d.conversationId ?? ''), d.message as MessageDTO)
+        const msg = d.message as MessageDTO | undefined
+        if (msg?.id) {
+          useApp.getState().applyMessageUpdate(String(d.conversationId ?? ''), msg)
+        } else {
+          void useApp.getState().reloadConversation(String(d.conversationId ?? ''))
+        }
       })
       subscribe('message:hidden', (d) => {
         useApp.getState().applyMessageHidden(String(d.conversationId ?? ''), String(d.messageId ?? ''))
@@ -98,7 +110,8 @@ export function useSocket() {
     let cleanup: () => void
 
     if (process.env.NEXT_PUBLIC_REALTIME_WS) {
-      // ---------- production transport: zero-dependency CF WebSocket ----------
+      // ---------- production transport A: zero-dependency CF WebSocket ----------
+      useApp.getState().setSocketAvailable(true)
       const rt = new RealtimeSocket(
         process.env.NEXT_PUBLIC_REALTIME_WS,
         fetchToken,
@@ -108,12 +121,27 @@ export function useSocket() {
       rt.connect()
       shared = rt
       cleanup = () => rt.close()
+    } else if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      // ---------- production transport B: Supabase Realtime broadcast ----------
+      // Raw Phoenix-protocol WebSocket, zero dependencies, no extra infra.
+      // Fanout comes from the API via the Supabase broadcast HTTP endpoint.
+      useApp.getState().setSocketAvailable(true)
+      const sb = new SupabaseRealtimeSocket(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        me.id,
+        (connected) => useApp.getState().setSocketConnected(connected)
+      )
+      registerAll((event, cb) => sb.on(event, cb))
+      sb.connect()
+      shared = sb
+      cleanup = () => sb.close()
     } else if (process.env.NODE_ENV === 'development') {
       // ---------- sandbox/preview transport: socket.io via Caddy ----------
-      // Dev/preview only. A production build without NEXT_PUBLIC_REALTIME_WS
-      // deliberately runs with no transport: retrying handshakes against
-      // serverless would burn thousands of function invocations per idle tab
-      // and realtime stays off until the CF worker is deployed + configured.
+      // Dev/preview only. A production build without a configured transport
+      // deliberately runs with none: retrying handshakes against serverless
+      // would burn thousands of function invocations per idle tab.
+      useApp.getState().setSocketAvailable(true)
       let socket: Socket | null = null
       let lastAuthRetry = 0
 
@@ -161,9 +189,10 @@ export function useSocket() {
         useApp.getState().setSocketConnected(false)
       }
     } else {
-      // ---------- production without the relay: no transport ----------
+      // ---------- production without any transport: honest offline state ----------
       // The app still works fully via fetch + refresh; realtime switches on
-      // as soon as NEXT_PUBLIC_REALTIME_WS points at the deployed worker.
+      // as soon as a transport is configured in the environment.
+      useApp.getState().setSocketAvailable(false)
       cleanup = () => undefined
     }
 

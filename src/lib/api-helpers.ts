@@ -25,8 +25,11 @@ export function isResponse(x: unknown): x is NextResponse {
 
 /** Fire-and-forget broadcast through the realtime bus.
  *  Local sandbox: socket.io mini-service bridge (port 3004).
- *  Production: the zero-dependency Cloudflare realtime worker
- *  (SOCKET_INTERNAL_URL + SOCKET_INTERNAL_SECRET). */
+ *  Production A: the zero-dependency Cloudflare realtime worker
+ *  (SOCKET_INTERNAL_URL + SOCKET_INTERNAL_SECRET).
+ *  Production B: Supabase Realtime broadcast via its HTTP endpoint
+ *  (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY) — no extra infra needed.
+ *  Both paths are fired independently; each client listens on one transport. */
 export function emitToRoom(room: string, event: string, data: unknown) {
   const url = process.env.SOCKET_INTERNAL_URL || 'http://127.0.0.1:3004/internal/emit'
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -35,6 +38,36 @@ export function emitToRoom(room: string, event: string, data: unknown) {
     method: 'POST',
     headers,
     body: JSON.stringify({ room, event, data }),
+  }).catch(() => {
+    // realtime is best-effort; persistence is the source of truth
+  })
+  supabaseBroadcast(room, event, data)
+}
+
+const SB_MESSAGE_EVENTS = new Set(['message:new', 'message:update'])
+
+/** Supabase Realtime HTTP broadcast (server-only, service key).
+ *  Topic mapping: room `user:<id>` / `conv:<id>` (no prefix here — the
+ *  realtime server exposes joined topics as `realtime:<topic>`).
+ *  Payloads over ~2.4 KB are replaced by a `{conversationId, stub:true}`
+ *  marker; clients refetch the conversation (broadcast payload limit). */
+function supabaseBroadcast(room: string, event: string, data: unknown) {
+  const sbUrl = process.env.SUPABASE_URL
+  const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!sbUrl || !sbKey) return
+  let payload = data
+  try {
+    if (data && typeof data === 'object' && JSON.stringify(data).length > 2400 && SB_MESSAGE_EVENTS.has(event)) {
+      payload = { conversationId: (data as { conversationId?: string }).conversationId, stub: true }
+    }
+  } catch {
+    /* keep original payload */
+  }
+  fetch(`${sbUrl}/realtime/v1/api/broadcast`, {
+    method: 'POST',
+    headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages: [{ topic: room, event, payload: payload ?? {} }] }),
+    signal: AbortSignal.timeout(4000),
   }).catch(() => {
     // realtime is best-effort; persistence is the source of truth
   })

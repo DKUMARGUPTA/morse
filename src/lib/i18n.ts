@@ -253,6 +253,7 @@ export const dictionaries = {
     offline: 'Offline — reconnecting...',
     connected: 'Connected',
     connecting: 'Connecting...',
+    realtimeOff: 'Realtime off',
     // pwa install
     installApp: 'Install app',
     installTagline: 'Add Morse Messenger to your home screen — full-screen, fast launch, works offline.',
@@ -502,6 +503,7 @@ export const dictionaries = {
     offline: 'ऑफ़लाइन — फिर जुड़ रहे हैं...',
     connected: 'जुड़ा हुआ',
     connecting: 'जुड़ रहे हैं...',
+    realtimeOff: 'रीयलटाइम बंद',
     // pwa install
     installApp: 'ऐप इंस्टॉल करें',
     installTagline: 'मॉर्स मैसेंजर को होम स्क्रीन पर जोड़ें — फ़ुल-स्क्रीन, तेज़ लॉन्च, ऑफ़लाइन भी चलता है।',

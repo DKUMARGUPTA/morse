@@ -28,6 +28,7 @@ export function MainShell() {
   const tab = useApp((s) => s.tab)
   const setTab = useApp((s) => s.setTab)
   const socketConnected = useApp((s) => s.socketConnected)
+  const socketAvailable = useApp((s) => s.socketAvailable)
   const notifications = useApp((s) => s.notifications)
 
   const unreadNotifs = useMemo(() => notifications.filter((n) => !n.read).length, [notifications])
@@ -54,6 +55,10 @@ export function MainShell() {
               {socketConnected ? (
                 <>
                   <Wifi className="h-3 w-3 text-emerald-400" /> {tr('connected')}
+                </>
+              ) : !socketAvailable ? (
+                <>
+                  <WifiOff className="h-3 w-3 text-[#8CA3C7]" /> {tr('realtimeOff')}
                 </>
               ) : (
                 <>

@@ -34,6 +34,8 @@ interface AppState {
   settings: SettingsDTO | null
   sessionLoaded: boolean
   socketConnected: boolean
+  /** false = no realtime transport is configured in this environment */
+  socketAvailable: boolean
   tab: Tab
   online: Record<string, boolean>
   conversations: ConversationDTO[]
@@ -60,9 +62,12 @@ interface AppState {
   setSession: (user: AppState['me']) => Promise<void>
   clearSession: () => void
   setSocketConnected: (v: boolean) => void
+  setSocketAvailable: (v: boolean) => void
   setPresence: (userId: string, online: boolean) => void
   loadConversations: () => Promise<void>
   openConversation: (id: string) => Promise<void>
+  /** refetch one conversation's messages (used for oversized realtime stubs) */
+  reloadConversation: (id: string) => Promise<void>
   closeConversation: () => void
   startConversationWith: (userId: string) => Promise<string | null>
   sendMessage: (text: string, sendMode: SendMode, playMode: PlayMode | null) => Promise<boolean>
@@ -111,6 +116,7 @@ export const useApp = create<AppState>((set, get) => ({
   settings: null,
   sessionLoaded: false,
   socketConnected: false,
+  socketAvailable: true,
   tab: 'chats',
   online: {},
   conversations: [],
@@ -199,6 +205,7 @@ export const useApp = create<AppState>((set, get) => ({
     }),
 
   setSocketConnected: (v) => set({ socketConnected: v }),
+  setSocketAvailable: (v) => set({ socketAvailable: v }),
   setPresence: (userId, online) => set((s) => ({ online: { ...s.online, [userId]: online } })),
 
   loadConversations: async () => {
@@ -232,6 +239,20 @@ export const useApp = create<AppState>((set, get) => ({
       void get().decryptMessages(data.messages)
     } catch {
       // network error — retry handled by user
+    }
+  },
+
+  reloadConversation: async (id) => {
+    if (!id) return
+    try {
+      const res = await fetch(`/api/conversations/${id}`)
+      if (!res.ok) return
+      const data = await res.json()
+      set((s) => ({ messages: { ...s.messages, [id]: data.messages } }))
+      void get().decryptMessages(data.messages)
+      void get().loadConversations()
+    } catch {
+      // network error — next realtime event or refresh recovers
     }
   },
 

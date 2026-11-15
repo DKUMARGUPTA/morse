@@ -121,22 +121,35 @@ The smoke test creates two disposable `@morse.test` users, exercises auth → co
 2. Set `DATABASE_URL` (Supabase session-pooler URI) and `AUTH_SECRET` (`openssl rand -base64 32`)
 3. Deploy — `prisma generate` runs automatically on install; push the schema once from any machine with DB access: `bunx prisma db push`
 
-### Realtime (zero-dependency Cloudflare Worker — free)
+### Realtime (three transports, one event contract)
 
-The socket.io relay needs a long-running process, so production realtime runs on
-a **self-contained Cloudflare Worker + Durable Object** (~300 lines of first-party
-code, no npm packages, WebSocket Hibernation = free tier friendly):
+| Transport | Where | Config | Notes |
+| --- | --- | --- | --- |
+| socket.io mini-service | sandbox / preview | none (dev default) | Caddy `XTransformPort:3003` |
+| Supabase Realtime broadcast | production (zero extra infra) | `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (server), `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` (client) | server fanout over the broadcast HTTP endpoint; client speaks the Phoenix v2 protocol over a raw WebSocket — zero npm dependencies; topics are unguessable ids and payloads are E2EE ciphertext |
+| Cloudflare Worker + Durable Object | production upgrade | `NEXT_PUBLIC_REALTIME_WS` + `SOCKET_INTERNAL_URL` + `SOCKET_INTERNAL_SECRET` | ~300 lines of first-party code, no npm packages, WebSocket Hibernation; adds server-verified room membership + presence snapshots |
+
+Priority: `NEXT_PUBLIC_REALTIME_WS` → Supabase broadcast → socket.io (dev) → none.
+The server always fans out to every configured path; each client listens on one.
+
+**Supabase transport security model:** conversation/user topics use unguessable
+cuid ids, everything on the wire is E2EE ciphertext (a forged frame fails
+decryption), and membership stays enforced at the API layer. The Cloudflare
+worker remains the stricter option (JWT handshake + membership-checked room
+joins + presence).
+
+### Cloudflare Worker setup (optional upgrade)
 
 1. `cd mini-services/realtime-worker` — full guide in [its README](mini-services/realtime-worker/README.md)
 2. `bunx wrangler secret put AUTH_SECRET` (same value as the app) and `INTERNAL_SECRET`, then `bunx wrangler deploy`
 3. In Vercel set `NEXT_PUBLIC_REALTIME_WS`, `SOCKET_INTERNAL_URL`, `SOCKET_INTERNAL_SECRET` (values in the worker README)
 
 Verified by a 3-layer test matrix (relay suite, membership enforcement suite,
-full-stack E2E) — 45+ assertions covering auth, isolation, presence, receipts
-and live delivery.
+full-stack E2E for both transports) — 75+ assertions covering auth, isolation,
+membership, receipts, typing and live delivery.
 
-**Fallback:** without those env vars the app degrades gracefully — sandbox mode
-uses the socket.io mini-service, and without any relay new messages sync on
+**Fallback:** without any transport configured the app degrades gracefully —
+the status pill shows "Realtime off" honestly, and new messages sync on
 refresh (persistence is always the source of truth).
 
 ## Roadmap
