@@ -1,5 +1,10 @@
 # Morse Messenger
 
+[![CI](https://github.com/DKUMARGUPTA/morse/actions/workflows/ci.yml/badge.svg)](https://github.com/DKUMARGUPTA/morse/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Next.js](https://img.shields.io/badge/Next.js-16-black)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/DKUMARGUPTA/morse&env=AUTH_SECRET,DATABASE_URL)
+
 **Chat normally. Talk in Morse.** — A global chat platform with built-in Morse code communication: convert any message to Morse and send it through **sound, screen light or vibration**, practice with an interactive tutor, and chat in a familiar messaging UI.
 
 > MVP build of the Morse Messenger PRD v1.0.
@@ -84,6 +89,38 @@ defines the WPM reference. Text ⇄ Morse conversion lives in `src/lib/morse.ts`
 
 ## Security model
 
-- Passwords hashed with scrypt; sessions are JWTs in httpOnly cookies; `tokenVersion` invalidates all sessions on password change / sign-out-everywhere
-- E2EE (beta): ECDH P-256 key agreement per 1:1 chat, AES-GCM payloads; the server only ever stores ciphertext
+- **Sessions** — scrypt-hashed passwords, HS256 JWTs in httpOnly SameSite cookies (`secure` in production); `tokenVersion` invalidates every session on password change / sign-out-everywhere
+- **Realtime auth** — the socket relay rejects unauthenticated handshakes; clients present a short-lived signed socket token (`/api/socket/token`) verified with the same `AUTH_SECRET`
+- **Brute force** — sliding-window rate limits: login 5/min per account + 10/min per IP, registration 5/min per IP (HTTP 429)
+- **Headers** — CSP, X-Frame-Options, nosniff, Referrer-Policy and Permissions-Policy on every route
+- **E2EE (beta, opt-in per conversation)** — ECDH P-256 key agreement, AES-GCM-256 payloads; the server only stores ciphertext and can never search it. No forward secrecy yet — the honest limitation list lives in [docs/SECURITY.md](docs/SECURITY.md)
 - Deleted messages stay deleted; nothing can prevent screenshots on the receiver's device
+
+## Testing
+
+```bash
+npm run lint                        # eslint
+npx tsc --noEmit                    # typecheck
+./scripts/api-smoke-test.sh         # 22-step API flow against a running dev server
+bun scripts/socket-auth-test.mjs    # realtime handshake security
+```
+
+The smoke test creates two disposable `@morse.test` users, exercises auth → conversations → messages → receipts → keys → export, then deletes them. `scripts/cleanup-qa-users.ts` removes any leftovers.
+
+## Deployment
+
+**Vercel + Supabase (recommended)**
+
+1. Import the repo on Vercel (framework auto-detected)
+2. Set `DATABASE_URL` (Supabase session-pooler URI) and `AUTH_SECRET` (`openssl rand -base64 32`)
+3. Deploy — `prisma generate` runs automatically on install; push the schema once from any machine with DB access: `bunx prisma db push`
+
+> **Realtime note:** the socket.io relay needs a long-running process, so live typing/presence/instant delivery does not run on Vercel serverless — history syncs on refresh. Host `mini-services/chat-service` on Railway/Render/Fly and point clients at it for full realtime.
+
+## Roadmap
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) — Signal-style ratcheting, disappearing messages, offline-first sync, group E2EE and more.
+
+## License
+
+[MIT](LICENSE)

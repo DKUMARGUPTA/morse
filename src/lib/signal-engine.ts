@@ -73,7 +73,7 @@ export class SignalPlayer {
     this.playing = true
     if (typeof fromMs === 'number') this.offsetMs = fromMs
     const useSound = (this.channel === 'sound' || this.channel === 'all') && canAudio()
-    const useLight = this.channel === 'light' || this.channel === 'all' || this.channel === 'sound' ? this.channel !== 'vibration' : false
+    const useLight = this.channel === 'light' || this.channel === 'all' || this.channel === 'sound'
     const useVibration =
       (this.channel === 'vibration' || this.channel === 'all') && canVibrate()
 

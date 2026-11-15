@@ -6,9 +6,16 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'crypto'
 import { cookies } from 'next/headers'
 import { db } from '@/lib/db'
 
-const SECRET = process.env.AUTH_SECRET || 'morse-messenger-dev-secret-do-not-use-in-prod'
+const DEV_FALLBACK = 'morse-messenger-dev-secret-do-not-use-in-prod'
+// The dev fallback string is public in the open-source repo, so it must never sign
+// sessions in production. Next.js fails fast instead of booting insecurely.
+const SECRET = process.env.AUTH_SECRET || (process.env.NODE_ENV === 'production' ? '' : DEV_FALLBACK)
+if (process.env.NODE_ENV === 'production' && !SECRET) {
+  throw new Error('AUTH_SECRET must be set in production — refusing to sign sessions.')
+}
 export const SESSION_COOKIE = 'mm_session'
 const SESSION_DAYS = 30
+const SOCKET_TOKEN_HOURS = 24
 
 // ---------- password ----------
 
@@ -38,17 +45,36 @@ export interface SessionPayload {
   exp: number
 }
 
-export function signSession(userId: string, tokenVersion: number): string {
+export interface SocketTokenPayload {
+  sub: string
+  tv: number
+  kind: 'sock'
+  exp: number
+}
+
+function sign(payload: SessionPayload | SocketTokenPayload): string {
   const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-  const payload = b64url(
-    JSON.stringify({
-      sub: userId,
-      tv: tokenVersion,
-      exp: Math.floor(Date.now() / 1000) + SESSION_DAYS * 86400,
-    } satisfies SessionPayload)
-  )
-  const sig = createHmac('sha256', SECRET).update(`${header}.${payload}`).digest('base64url')
-  return `${header}.${payload}.${sig}`
+  const body = b64url(JSON.stringify(payload))
+  const sig = createHmac('sha256', SECRET).update(`${header}.${body}`).digest('base64url')
+  return `${header}.${body}.${sig}`
+}
+
+export function signSession(userId: string, tokenVersion: number): string {
+  return sign({
+    sub: userId,
+    tv: tokenVersion,
+    exp: Math.floor(Date.now() / 1000) + SESSION_DAYS * 86400,
+  })
+}
+
+/** Short-lived token used only for the realtime service handshake (24h). */
+export function signSocketToken(userId: string, tokenVersion: number): string {
+  return sign({
+    sub: userId,
+    tv: tokenVersion,
+    kind: 'sock',
+    exp: Math.floor(Date.now() / 1000) + SOCKET_TOKEN_HOURS * 3600,
+  })
 }
 
 export function verifySession(token: string): SessionPayload | null {
@@ -100,7 +126,7 @@ export async function setSessionCookie(userId: string, tokenVersion: number) {
   store.set(SESSION_COOKIE, signSession(userId, tokenVersion), {
     httpOnly: true,
     sameSite: 'lax',
-    secure: false, // sandbox preview runs behind a proxy without user HTTPS origin
+    secure: process.env.NODE_ENV === 'production', // https-only outside the sandbox dev server
     maxAge: SESSION_DAYS * 86400,
     path: '/',
   })

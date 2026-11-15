@@ -19,7 +19,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   try {
     const body = await req.json()
-    const ids = Array.from(new Set((Array.isArray(body.userIds) ? body.userIds : []).map((x: unknown) => String(x)))).filter(
+    const rawIds: string[] = (Array.isArray(body.userIds) ? body.userIds : []).map((x: unknown) => String(x))
+    const ids = Array.from(new Set(rawIds)).filter(
       (x: string) => x && !conv.members.some((m) => m.userId === x)
     )
     if (ids.length === 0) return fail(400, 'NO_NEW_MEMBERS')

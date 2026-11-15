@@ -3,7 +3,53 @@
 // HTTP endpoint so Next.js API routes can broadcast persisted events.
 
 import { createServer } from 'http'
+import { createHmac, timingSafeEqual } from 'crypto'
+import { readFileSync } from 'fs'
 import { Server } from 'socket.io'
+
+// The service runs from mini-services/chat-service, so bun does not find the root
+// .env automatically — load it explicitly (real environment variables always win).
+try {
+  const envFile = readFileSync(new URL('../../.env', import.meta.url), 'utf8')
+  for (const line of envFile.split('\n')) {
+    const m = line.match(/^([A-Z0-9_]+)="?(.*?)"?$/)
+    if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2]
+  }
+} catch {
+  /* no .env — fine outside the sandbox */
+}
+
+// Must match src/lib/auth.ts. AUTH_SECRET is required in production; the well-known
+// dev fallback keeps local development simple and is rejected by Next in production.
+const SECRET = process.env.AUTH_SECRET || 'morse-messenger-dev-secret-do-not-use-in-prod'
+if (!SECRET) {
+  console.error('AUTH_SECRET is required in production')
+  process.exit(1)
+}
+
+interface SocketTokenPayload {
+  sub: string
+  kind: string
+  exp: number
+}
+
+/** Verify a signed socket token (HS256, same scheme as src/lib/auth.ts). */
+function verifySocketToken(token: string): string | null {
+  const parts = token.split('.')
+  if (parts.length !== 3) return null
+  const [header, payload, sig] = parts
+  const expected = createHmac('sha256', SECRET).update(`${header}.${payload}`).digest('base64url')
+  const a = Buffer.from(sig)
+  const b = Buffer.from(expected)
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString()) as SocketTokenPayload
+    if (data.kind !== 'sock' || !data.sub || !data.exp || data.exp < Math.floor(Date.now() / 1000)) return null
+    return String(data.sub)
+  } catch {
+    return null
+  }
+}
 
 const httpServer = createServer()
 const io = new Server(httpServer, {
@@ -17,6 +63,15 @@ const io = new Server(httpServer, {
   pingInterval: 25000,
 })
 
+// Every realtime connection must present a valid signed socket token.
+io.use((socket, next) => {
+  const token = String(socket.handshake.auth?.token ?? '')
+  const userId = verifySocketToken(token)
+  if (!userId) return next(new Error('unauthorized'))
+  socket.data.userId = userId
+  next()
+})
+
 // presence: userId -> number of connected sockets
 const presence = new Map<string, number>()
 
@@ -28,7 +83,7 @@ function setPresence(userId: string, delta: number) {
 }
 
 io.on('connection', (socket) => {
-  const userId = String(socket.handshake.auth?.userId ?? '')
+  const userId = String(socket.data.userId ?? '')
   if (userId) {
     socket.join(`user:${userId}`)
     setPresence(userId, +1)

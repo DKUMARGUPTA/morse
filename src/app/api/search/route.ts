@@ -16,7 +16,15 @@ export async function GET(req: NextRequest) {
     include: { conversation: { include: { members: { include: { user: { select: { displayName: true } } } } } } },
   })
 
-  const hits = []
+  const hits: Array<{
+    conversationId: string
+    messageId: string
+    text: string
+    senderId: string
+    senderName: string
+    createdAt: string
+    convTitle: string
+  }> = []
   for (const m of memberships) {
     if (m.conversation.e2eeEnabled) continue
     const convTitle = m.conversation.isGroup
@@ -27,7 +35,7 @@ export async function GET(req: NextRequest) {
         conversationId: m.conversationId,
         encrypted: false,
         kind: { not: 'system' },
-        text: { contains: q },
+        text: { contains: q, mode: 'insensitive' as const },
       },
       include: { sender: { select: { displayName: true } } },
       orderBy: { createdAt: 'desc' },

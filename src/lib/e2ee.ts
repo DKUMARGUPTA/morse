@@ -17,8 +17,12 @@ function b64(buf: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(buf)))
 }
 
-function unb64(s: string): Uint8Array {
-  return Uint8Array.from(atob(s), (c) => c.charCodeAt(0))
+function unb64(s: string): Uint8Array<ArrayBuffer> {
+  const bin = atob(s)
+  const buf = new ArrayBuffer(bin.length)
+  const out = new Uint8Array(buf)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out
 }
 
 function supported(): boolean {

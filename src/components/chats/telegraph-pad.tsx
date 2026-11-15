@@ -20,7 +20,7 @@ export function TelegraphPad({ onSend, compact }: { onSend?: (text: string) => v
   const [elements, setElements] = useState<('.' | '-')[]>([])
   const [committed, setCommitted] = useState('') // decoded text so far
   const [pressed, setPressed] = useState(false)
-  const [lastKey, setLastKey] = useState<'dot' | 'dash' | null>(null)
+  const [lastKey, setLastKey] = useState<'.' | '-' | null>(null)
   const downAt = useRef(0)
   const letterTimer = useRef<number | null>(null)
   const wordTimer = useRef<number | null>(null)
@@ -136,13 +136,13 @@ export function TelegraphPad({ onSend, compact }: { onSend?: (text: string) => v
         )}
       >
         <span className={cn('font-mono text-3xl', pressed ? 'text-[#22D3EE]' : 'text-[#3D527A]')}>
-          {pressed ? '▼' : lastKey === 'dash' ? '—' : lastKey === 'dot' ? '•' : '▼'}
+          {pressed ? '▼' : lastKey === '-' ? '—' : lastKey === '.' ? '•' : '▼'}
         </span>
         <span className="px-4 text-center text-xs text-[#8CA3C7]">{tr('tapHold')}</span>
         <span className="font-mono text-sm tracking-[0.3em] text-[#C9D6F2]">
           {elements.map((el, i) => (
-            <span key={i} className={cn(el === 'dot' ? 'text-[#22D3EE]' : 'text-[#FBBF24]')}>
-              {el === 'dot' ? '·' : '-'}
+            <span key={i} className={cn(el === '.' ? 'text-[#22D3EE]' : 'text-[#FBBF24]')}>
+              {el === '.' ? '·' : '-'}
             </span>
           ))}
         </span>

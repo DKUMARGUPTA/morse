@@ -30,71 +30,105 @@ export function useSocket() {
 
   useEffect(() => {
     if (!me) return
-    const socket: Socket = io('/?XTransformPort=3003', {
-      path: '/',
-      auth: { userId: me.id },
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-    })
-    shared = socket
+    let cancelled = false
+    let lastAuthRetry = 0
+    let socket: Socket | null = null
 
-    socket.on('connect', () => useApp.getState().setSocketConnected(true))
-    socket.on('disconnect', () => useApp.getState().setSocketConnected(false))
-    socket.on('connect_error', () => useApp.getState().setSocketConnected(false))
-
-    socket.on('presence', (data: { userId: string; online: boolean }) => {
-      useApp.getState().setPresence(data.userId, data.online)
-    })
-
-    socket.on(
-      'message:new',
-      (data: { conversationId: string; message: MessageDTO }) => {
-        void useApp.getState().applyMessageNew(data.conversationId, data.message)
-      }
-    )
-
-    socket.on('message:update', (data: { conversationId: string; message: MessageDTO }) => {
-      useApp.getState().applyMessageUpdate(data.conversationId, data.message)
-    })
-
-    socket.on('message:hidden', (data: { conversationId: string; messageId: string }) => {
-      useApp.getState().applyMessageHidden(data.conversationId, data.messageId)
-    })
-
-    socket.on(
-      'receipt:update',
-      (data: { conversationId: string; messageId: string; delivered: boolean; read: boolean }) => {
-        useApp.getState().applyReceipt(data.conversationId, data.messageId, data.delivered, data.read)
-      }
-    )
-
-    socket.on(
-      'typing',
-      (data: { conversationId: string; userId: string; displayName: string; isTyping: boolean }) => {
-        const state = useApp.getState()
-        if (data.userId === me.id) return
-        state.setTyping(data.conversationId, data.isTyping ? data.displayName : null)
-        if (data.isTyping) {
-          setTimeout(() => {
-            const cur = useApp.getState().typingIn[data.conversationId]
-            if (cur && Date.now() - cur.at > 4200) {
-              useApp.getState().setTyping(data.conversationId, null)
-            }
-          }, 4500)
+    const attach = (s: Socket) => {
+      s.on('connect', () => useApp.getState().setSocketConnected(true))
+      s.on('disconnect', () => useApp.getState().setSocketConnected(false))
+      s.on('connect_error', () => {
+        useApp.getState().setSocketConnected(false)
+        // the handshake token may have expired — refresh it and re-authenticate
+        // (guarded so a persistently failing socket cannot spam the API)
+        const now = Date.now()
+        if (now - lastAuthRetry > 60_000) {
+          lastAuthRetry = now
+          void fetch('/api/socket/token')
+            .then(async (r) => (r.ok ? ((await r.json()) as { token: string }) : null))
+            .then((data) => {
+              if (data?.token && socket) {
+                socket.auth = { token: data.token }
+                socket.connect()
+              }
+            })
+            .catch(() => undefined)
         }
+      })
+
+      s.on('presence', (data: { userId: string; online: boolean }) => {
+        useApp.getState().setPresence(data.userId, data.online)
+      })
+
+      s.on('message:new', (data: { conversationId: string; message: MessageDTO }) => {
+        void useApp.getState().applyMessageNew(data.conversationId, data.message)
+      })
+
+      s.on('message:update', (data: { conversationId: string; message: MessageDTO }) => {
+        useApp.getState().applyMessageUpdate(data.conversationId, data.message)
+      })
+
+      s.on('message:hidden', (data: { conversationId: string; messageId: string }) => {
+        useApp.getState().applyMessageHidden(data.conversationId, data.messageId)
+      })
+
+      s.on(
+        'receipt:update',
+        (data: { conversationId: string; messageId: string; delivered: boolean; read: boolean }) => {
+          useApp.getState().applyReceipt(data.conversationId, data.messageId, data.delivered, data.read)
+        }
+      )
+
+      s.on(
+        'typing',
+        (data: { conversationId: string; userId: string; displayName: string; isTyping: boolean }) => {
+          const state = useApp.getState()
+          if (data.userId === me.id) return
+          state.setTyping(data.conversationId, data.isTyping ? data.displayName : null)
+          if (data.isTyping) {
+            setTimeout(() => {
+              const cur = useApp.getState().typingIn[data.conversationId]
+              if (cur && Date.now() - cur.at > 4200) {
+                useApp.getState().setTyping(data.conversationId, null)
+              }
+            }, 4500)
+          }
+        }
+      )
+
+      s.on('conv:new', () => {
+        void useApp.getState().loadConversations()
+      })
+
+      s.on('conv:update', () => {
+        void useApp.getState().loadConversations()
+      })
+    }
+
+    void (async () => {
+      // realtime needs a signed socket token — the httpOnly session cookie cannot be read here
+      let token = ''
+      try {
+        const res = await fetch('/api/socket/token')
+        if (res.ok) token = ((await res.json()) as { token: string }).token
+      } catch {
+        /* realtime unavailable; the app still works via refresh */
       }
-    )
+      if (cancelled) return
 
-    socket.on('conv:new', () => {
-      void useApp.getState().loadConversations()
-    })
-
-    socket.on('conv:update', () => {
-      void useApp.getState().loadConversations()
-    })
+      socket = io('/?XTransformPort=3003', {
+        path: '/',
+        auth: { token },
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+      })
+      shared = socket
+      attach(socket)
+    })()
 
     return () => {
-      socket.disconnect()
+      cancelled = true
+      socket?.disconnect()
       shared = null
       useApp.getState().setSocketConnected(false)
     }

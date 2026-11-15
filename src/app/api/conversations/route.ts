@@ -27,7 +27,24 @@ export async function GET() {
   })
   const hiddenIds = hidden.map((h) => h.messageId)
 
-  const result = []
+  const result: Array<{
+    id: string
+    peer: { id: string; displayName: string; avatarColor: string } | null
+    isGroup: boolean
+    name: string | null
+    members: { id: string; displayName: string; avatarColor: string }[]
+    myRole: string
+    e2eeEnabled: boolean
+    createdAt: string
+    updatedAt: string
+    lastMessage: { id: string; kind: string; text: string; morse: string | null; encrypted: boolean; senderId: string; createdAt: string } | null
+    unreadCount: number
+    blockedByMe: boolean
+    blockedMe: boolean
+    pinned: boolean
+    muted: boolean
+    myDisplayMode: string
+  }> = []
   for (const m of memberships) {
     const conv = m.conversation
     const others = conv.members.filter((x) => x.userId !== me.id)
@@ -97,9 +114,8 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(body.memberIds)) {
       const name = String(body.name ?? '').trim()
       if (!name || name.length > 60) return fail(400, 'BAD_GROUP_NAME', 'Group name must be 1-60 characters.')
-      const ids = Array.from(new Set(body.memberIds.map((x: unknown) => String(x)))).filter(
-        (x: string) => x && x !== me.id
-      )
+      const rawIds: string[] = (Array.isArray(body.memberIds) ? body.memberIds : []).map((x: unknown) => String(x))
+      const ids = Array.from(new Set(rawIds)).filter((x: string) => x && x !== me.id)
       if (ids.length === 0) return fail(400, 'NO_MEMBERS', 'Pick at least one member.')
       if (ids.length > 49) return fail(400, 'TOO_MANY_MEMBERS', 'Groups are limited to 50 members.')
 

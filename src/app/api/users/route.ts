@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const users = await db.user.findMany({
     where: {
       id: { notIn: Array.from(hiddenIds) },
-      ...(q ? { displayName: { contains: q } } : {}),
+      ...(q ? { displayName: { contains: q, mode: 'insensitive' as const } } : {}),
     },
     select: { id: true, displayName: true, avatarColor: true },
     orderBy: { displayName: 'asc' },

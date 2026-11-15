@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { hashPassword, setSessionCookie } from '@/lib/auth'
 import { fail } from '@/lib/api-helpers'
+import { clientIp, rateLimit } from '@/lib/rate-limit'
 
 const AVATAR_COLORS = ['#22D3EE', '#F472B6', '#34D399', '#FBBF24', '#A78BFA', '#FB7185', '#4ADE80', '#38BDF8']
 
@@ -11,6 +12,11 @@ export async function POST(req: NextRequest) {
     const email = String(body.email ?? '').trim().toLowerCase()
     const password = String(body.password ?? '')
     const displayName = String(body.displayName ?? '').trim()
+
+    // signup abuse guard: 5/min per IP
+    if (!rateLimit(`register:${clientIp(req)}`, 5, 60_000)) {
+      return fail(429, 'TOO_MANY_ATTEMPTS', 'Too many attempts. Try again in a minute.')
+    }
 
     if (!email || !password) return fail(400, 'MISSING_FIELDS', 'Email and password are required.')
     if (!displayName) return fail(400, 'MISSING_NAME', 'Display name is required.')

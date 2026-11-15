@@ -26,7 +26,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const others = conv.members.filter((m) => m.userId !== me.id)
   if (others.length === 0) return fail(404, 'NOT_FOUND')
 
-  let peer = null
+  let peer: { id: string; displayName: string; avatarColor: string } | null = null
   let blockedByMe = false
   let blockedMe = false
   if (!conv.isGroup && others[0]) {
