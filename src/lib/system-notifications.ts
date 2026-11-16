@@ -28,6 +28,24 @@ async function ensureRegistration(): Promise<ServiceWorkerRegistration | null> {
   }
 }
 
+/** Incoming-message notifications for the hidden-but-alive page. On a
+ *  push-subscribed device the service worker owns background notifications
+ *  (it also covers frozen tabs, which this page can never reach) — so the
+ *  page stays quiet to avoid a double banner + double sound. */
+export async function notifyIncomingMessage(opts: {
+  title: string
+  body: string
+  conversationId?: string
+}): Promise<void> {
+  try {
+    const { getPushState } = await import('@/lib/push-client')
+    if ((await getPushState()) === 'subscribed') return
+  } catch {
+    /* fall through — show from the page */
+  }
+  await showSystemNotification(opts)
+}
+
 /** Show an OS notification for an incoming message. Returns false when
  *  permission is missing or the browser refused. */
 export async function showSystemNotification(opts: {

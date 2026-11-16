@@ -6,7 +6,7 @@
  *  - push events         : metadata-only notification (no message text — E2EE safe)
  */
 
-const VERSION = 'morse-v2'
+const VERSION = 'morse-v3'
 const SHELL_CACHE = `${VERSION}-shell`
 const ASSET_CACHE = `${VERSION}-assets`
 
@@ -118,11 +118,15 @@ self.addEventListener('push', (event) => {
       } catch {
         data = {}
       }
-      // If any app window is open (visible or in the background), the page
-      // shows the notification/chime itself — pushing here too would double
-      // every banner. This path only covers the fully-closed app.
+      // Suppress only when a window is actually on screen (the visible page
+      // shows the in-app bell itself). A hidden or FROZEN background tab is
+      // still a "client", but a frozen page can never run JS to show the
+      // notification — skipping there lost messages on mobile. So: if any
+      // client is visible → page handles it; otherwise the SW shows it.
       const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-      if (clientList.length > 0) return
+      const visibilityKnown = clientList.every((c) => typeof c.visibilityState === 'string')
+      const anyVisible = clientList.some((c) => c.visibilityState === 'visible')
+      if (clientList.length > 0 && (!visibilityKnown || anyVisible)) return
       const title = data.s || 'Morse Messenger'
       const body = data.b || 'New message · · − − ·'
       await self.registration.showNotification(title, {

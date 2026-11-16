@@ -13,6 +13,7 @@ import { useSignalPlayer } from '@/hooks/use-signal-player'
 import { canVibrate } from '@/lib/signal-engine'
 import { playChime } from '@/lib/notification-sound'
 import { enablePush, disablePush, getPushState, pushSupported, type PushState } from '@/lib/push-client'
+import { showSystemNotification } from '@/lib/system-notifications'
 import { keyFingerprint, publishPublicKey, resetLocalKeypair } from '@/lib/e2ee'
 import { cn } from '@/lib/utils'
 import { PwaInstallSection } from '@/components/pwa/pwa-install'
@@ -363,6 +364,13 @@ function PushRow() {
 
   if (state === 'unsupported' || !pushSupported()) return null
 
+  async function sendTest() {
+    // Direct user-gesture test of the OS notification layer — bypasses the
+    // subscribed check on purpose so it works before and after enabling push.
+    const ok = await showSystemNotification({ title: 'Morse Messenger', body: tr('pushTestBody') })
+    if (!ok) alert(tr('pushDenied'))
+  }
+
   return (
     <div className="space-y-1.5">
       <label className="flex cursor-pointer items-center justify-between gap-3">
@@ -381,6 +389,12 @@ function PushRow() {
           className="data-[state=checked]:bg-[#22D3EE]"
         />
       </label>
+      <button
+        onClick={() => void sendTest()}
+        className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#1E2C4F] text-sm text-[#C9D6F2] hover:border-[#22D3EE]/50 hover:text-[#22D3EE]"
+      >
+        {tr('pushTest')}
+      </button>
     </div>
   )
 }

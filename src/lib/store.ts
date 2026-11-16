@@ -17,7 +17,7 @@ import type { Lang, DictKey } from '@/lib/i18n'
 import { t } from '@/lib/i18n'
 import { decryptText, encryptText, publishPublicKey } from '@/lib/e2ee'
 import { playChime, vibrate } from '@/lib/notification-sound'
-import { isAppHidden, showSystemNotification } from '@/lib/system-notifications'
+import { isAppHidden, notifyIncomingMessage } from '@/lib/system-notifications'
 
 export type Tab = 'chats' | 'morse' | 'learn' | 'settings'
 
@@ -263,7 +263,7 @@ export const useApp = create<AppState>((set, get) => ({
             // (other tab / screen off / other app). A visible app shows the
             // in-app bell instead — no duplicate banners.
             if (isAppHidden()) {
-              void showSystemNotification({
+              void notifyIncomingMessage({
                 title: senderName,
                 body: (preview || '···').slice(0, 80),
                 conversationId: c.id,
@@ -511,7 +511,7 @@ export const useApp = create<AppState>((set, get) => ({
       if (settings?.vibrationEnabled) vibrate(60)
       // OS notification while the app is in the background (see loadConversations)
       if (isAppHidden()) {
-        void showSystemNotification({
+        void notifyIncomingMessage({
           title: message.senderName,
           body: (preview || '···').slice(0, 80),
           conversationId,
