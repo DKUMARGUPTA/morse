@@ -93,7 +93,7 @@ export function Composer({
       if (!okSend) {
         // restore the draft so a failed send never destroys typed text
         setDraft(conversationId, text)
-        setError(tr('errNetwork'))
+        setError(useApp.getState().lastSendFail === 'rate' ? tr('errSlowDown') : tr('errNetwork'))
       }
     } finally {
       setSending(false)

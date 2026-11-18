@@ -77,9 +77,9 @@ export function GroupAvatar({
     xl: 'h-20 w-20 text-xl',
   }
   const palette = ['#22D3EE', '#34D399', '#F472B6', '#FBBF24', '#A78BFA', '#60A5FA']
-  const initials = name
-    .split(/\s+/)
-    .map((p) => p[0])
+  // Array.from iterates by code point — emoji/surrogate names keep their glyphs
+  const initials = Array.from(name.trim().split(/\s+/))
+    .map((p) => Array.from(p)[0] ?? '')
     .filter(Boolean)
     .slice(0, 2)
     .join('')

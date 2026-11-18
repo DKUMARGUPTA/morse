@@ -15,7 +15,7 @@ import type {
 } from '@/lib/types'
 import type { Lang, DictKey } from '@/lib/i18n'
 import { t } from '@/lib/i18n'
-import { decryptText, encryptText, publishPublicKey } from '@/lib/e2ee'
+import { decryptText, encryptText, publishPublicKey, setE2eeUser } from '@/lib/e2ee'
 import { playChime, vibrate } from '@/lib/notification-sound'
 import { isAppHidden, notifyIncomingMessage } from '@/lib/system-notifications'
 
@@ -42,6 +42,10 @@ interface AppState {
   online: Record<string, boolean>
   conversations: ConversationDTO[]
   conversationsLoaded: boolean
+  /** true when the list failed to load AND there is nothing to show — drives the retry card */
+  convLoadError: boolean
+  /** sendMessage result detail: 'rate' = rate limited (429), null otherwise */
+  lastSendFail: 'rate' | null
   activeId: string | null
   messages: Record<string, MessageDTO[]>
   displayModes: Record<string, ChatDisplayMode>
@@ -126,6 +130,8 @@ export const useApp = create<AppState>((set, get) => ({
   online: {},
   conversations: [],
   conversationsLoaded: false,
+  convLoadError: false,
+  lastSendFail: null,
   activeId: null,
   messages: {},
   displayModes: {},
@@ -169,7 +175,13 @@ export const useApp = create<AppState>((set, get) => ({
           ...(code ? { activeInvite: code } : {}),
         })
         await conversationsPromise
-        void publishPublicKey().then(() => get().loadPeerKeys())
+        setE2eeUser(data.user.id)
+        void publishPublicKey().then((r) => {
+          if (r === 'conflict') {
+            get().addNotification({ type: 'system', titleKey: 'keyConflict', body: get().tr('keyConflictBody') })
+          }
+          return get().loadPeerKeys()
+        })
       } else {
         set({
           me: null,
@@ -189,20 +201,34 @@ export const useApp = create<AppState>((set, get) => ({
     const res = await fetch('/api/auth/me')
     const data = await res.json()
     set({ me: data.user ?? user, settings: data.settings })
+    const effective = data.user ?? user
+    if (effective) {
+      setE2eeUser(effective.id)
+      void publishPublicKey().then((r) => {
+        if (r === 'conflict') {
+          get().addNotification({ type: 'system', titleKey: 'keyConflict', body: get().tr('keyConflictBody') })
+        }
+        return get().loadPeerKeys()
+      })
+    }
     const pending = get().pendingInviteCode
     if (pending) {
       set({ activeInvite: pending, pendingInviteCode: null })
     }
     void get().loadConversations()
-    void publishPublicKey().then(() => get().loadPeerKeys())
   },
 
-  clearSession: () =>
+  clearSession: () => {
+    // unbind the E2EE module from this account (the per-user stored key stays
+    // on the device so the SAME user signing back in keeps their E2EE history;
+    // a different account gets its own namespace and can never inherit it)
+    setE2eeUser(null)
     set({
       me: null,
       settings: null,
       conversations: [],
       conversationsLoaded: false,
+      convLoadError: false,
       activeId: null,
       messages: {},
       notifications: [],
@@ -210,7 +236,10 @@ export const useApp = create<AppState>((set, get) => ({
       peerKeys: {},
       e2eeTexts: {},
       e2eeFailed: {},
-    }),
+      replyTo: null,
+      composerDraft: {},
+    })
+  },
 
   setSocketConnected: (v) => set({ socketConnected: v }),
   setSocketAvailable: (v) => set({ socketAvailable: v }),
@@ -223,12 +252,21 @@ export const useApp = create<AppState>((set, get) => ({
       // refresh even when realtime transport is down)
       const prev = get().conversations
       const res = await fetch('/api/conversations')
-      if (!res.ok) return
+      if (res.status === 401) {
+        get().clearSession()
+        return
+      }
+      if (!res.ok) {
+        // only flag when there is nothing to show; a stale list still beats an error card
+        if (get().conversations.length === 0) set({ conversationsLoaded: true, convLoadError: true })
+        return
+      }
       const data = await res.json()
       const next = data.conversations as ConversationDTO[]
       set((s) => ({
         conversations: next.map((c) => (c.id === s.activeId ? { ...c, unreadCount: 0 } : c)),
         conversationsLoaded: true,
+        convLoadError: false,
       }))
 
       // ---- diff prev vs next: detect freshly arrived messages ----
@@ -287,7 +325,7 @@ export const useApp = create<AppState>((set, get) => ({
         .filter((m): m is NonNullable<typeof m> => !!m && m.encrypted)
       if (previews.length > 0) void get().decryptMessages(previews)
     } catch {
-      set({ conversationsLoaded: true })
+      if (get().conversations.length === 0) set({ conversationsLoaded: true, convLoadError: true })
     }
   },
 
@@ -295,6 +333,10 @@ export const useApp = create<AppState>((set, get) => ({
     set({ activeId: id, replyTo: null })
     try {
       const res = await fetch(`/api/conversations/${id}`)
+      if (res.status === 401) {
+        get().clearSession()
+        return
+      }
       if (!res.ok) return
       const data = await res.json()
       set((s) => ({ messages: { ...s.messages, [id]: data.messages } }))
@@ -313,6 +355,10 @@ export const useApp = create<AppState>((set, get) => ({
     if (!id) return
     try {
       const res = await fetch(`/api/conversations/${id}`)
+      if (res.status === 401) {
+        get().clearSession()
+        return
+      }
       if (!res.ok) return
       const data = await res.json()
       set((s) => ({ messages: { ...s.messages, [id]: data.messages } }))
@@ -332,6 +378,10 @@ export const useApp = create<AppState>((set, get) => ({
     if (!me || !conversationId) return
     try {
       const res = await fetch(`/api/conversations/${conversationId}`)
+      if (res.status === 401) {
+        get().clearSession()
+        return
+      }
       if (!res.ok) return
       const data = (await res.json()) as { messages: MessageDTO[] }
       const incoming = Array.isArray(data.messages) ? data.messages : []
@@ -448,6 +498,14 @@ export const useApp = create<AppState>((set, get) => ({
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
+        if (res.status === 401) {
+          get().clearSession()
+          return false
+        }
+        if (res.status === 429) {
+          set({ lastSendFail: 'rate' })
+          return false
+        }
         if (res.status === 403) {
           get().addNotification({ type: 'system', titleKey: 'errGeneric', body: err.message ?? 'Blocked' })
         }
@@ -499,6 +557,10 @@ export const useApp = create<AppState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: payloadText }),
       })
+      if (res.status === 401) {
+        get().clearSession()
+        return false
+      }
       if (!res.ok) return false
       const data = await res.json()
       const message = data.message as MessageDTO

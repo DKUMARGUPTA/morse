@@ -22,6 +22,13 @@ const DRILL_WORDS = [
   'ECHO', 'DELTA', 'OSCAR', 'INDIA', 'CHAT', 'FRIEND', 'LIGHT', 'SOUND', 'TAP',
 ]
 
+/** yyyy-mm-dd in the USER's calendar day (server runs UTC — sending this keeps
+ *  the daily counter and the 14-day activity strip on the same day). */
+function localDayKey(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function makeQuestion(pool: string[], allChars: string[]): { current: string; options: string[] } {
   const usePool = pool.length >= 4 ? pool : allChars
   const ch = usePool[Math.floor(Math.random() * usePool.length)]
@@ -170,7 +177,8 @@ function Quiz() {
       await fetch('/api/learn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ character: current, correct }),
+        // local calendar day — the server is UTC and would mis-key nights
+        body: JSON.stringify({ character: current, correct, date: localDayKey() }),
       })
       void loadLearn()
     } catch {
@@ -269,7 +277,7 @@ function Drill() {
       await fetch('/api/learn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'drill' }),
+        body: JSON.stringify({ type: 'drill', date: localDayKey() }),
       })
       void loadLearn()
     } catch {

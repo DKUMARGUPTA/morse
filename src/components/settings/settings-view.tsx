@@ -60,11 +60,15 @@ export function SettingsView() {
   }
 
   async function signOut() {
+    // stop this device receiving pushes for this account BEFORE the session dies
+    // (404/410 after logout would leave a live subscription row on the server)
+    await disablePush().catch(() => undefined)
     await fetch('/api/auth/logout', { method: 'POST' })
     clearSession()
   }
 
   async function signOutAll() {
+    await disablePush().catch(() => undefined)
     await fetch('/api/auth/me', { method: 'POST' })
     clearSession()
   }
@@ -76,6 +80,7 @@ export function SettingsView() {
       body: JSON.stringify({ confirm: deleteConfirm }),
     })
     if (res.ok) {
+      await disablePush().catch(() => undefined)
       clearSession()
     }
   }
@@ -422,17 +427,20 @@ function EncryptionSection() {
   }, [])
 
   async function republish() {
-    const okRes = await publishPublicKey()
-    setPublished(okRes)
-    if (okRes) {
+    const result = await publishPublicKey()
+    setPublished(result === 'ok')
+    if (result === 'ok') {
       addNotification({ type: 'system', titleKey: 'notifTitle', body: tr('keyPublished') })
+    } else if (result === 'conflict') {
+      addNotification({ type: 'system', titleKey: 'keyConflict', body: tr('keyConflictBody') })
     }
   }
 
   async function resetKey() {
     resetLocalKeypair()
-    const okRes = await publishPublicKey()
-    setPublished(okRes)
+    // this device deliberately takes over: confirm overrides the server's conflict guard
+    const result = await publishPublicKey({ confirm: true })
+    setPublished(result === 'ok')
     try {
       const pair = await import('@/lib/e2ee').then((m) => m.ensureKeypair())
       if (pair) setFp(await keyFingerprint(pair.publicKeyJwk))

@@ -7,6 +7,13 @@ function todayStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/** the client sends its local calendar day (it knows its timezone; the server is UTC).
+ *  Accept only a strict yyyy-mm-dd to keep the unique date key clean. */
+function dayFromBody(v: unknown): string {
+  const s = typeof v === 'string' ? v : ''
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : todayStr()
+}
+
 function yesterdayStr(): string {
   const d = new Date(Date.now() - 86400000)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -58,10 +65,11 @@ export async function POST(req: NextRequest) {
 
   // Daily drill (Phase 3): word-level practice, only bumps the daily counter
   if (body.type === 'drill') {
+    const day = dayFromBody(body.date)
     await db.dailyPractice.upsert({
-      where: { userId_date: { userId: me.id, date: todayStr() } },
+      where: { userId_date: { userId: me.id, date: day } },
       update: { count: { increment: 1 } },
-      create: { userId: me.id, date: todayStr(), count: 1 },
+      create: { userId: me.id, date: day, count: 1 },
     })
     return ok({ success: true })
   }
@@ -94,9 +102,9 @@ export async function POST(req: NextRequest) {
     })
   }
   await db.dailyPractice.upsert({
-    where: { userId_date: { userId: me.id, date: todayStr() } },
+    where: { userId_date: { userId: me.id, date: dayFromBody(body.date) } },
     update: { count: { increment: 1 } },
-    create: { userId: me.id, date: todayStr(), count: 1 },
+    create: { userId: me.id, date: dayFromBody(body.date), count: 1 },
   })
   return ok({ success: true })
 }

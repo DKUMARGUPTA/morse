@@ -24,7 +24,9 @@ export async function GET() {
   })
 }
 
-/** POST /api/keys — publish my E2EE public key (JWK JSON string) */
+/** POST /api/keys — publish my E2EE public key (JWK JSON string).
+ *  Guard: a silently different key would strand the old device's E2EE history.
+ *  Overwriting a published key with a DIFFERENT one needs { confirm: true }. */
 export async function POST(req: NextRequest) {
   const me = await requireUser()
   if (isResponse(me)) return me
@@ -37,6 +39,9 @@ export async function POST(req: NextRequest) {
       if (jwk.kty !== 'EC' || jwk.crv !== 'P-256') return fail(400, 'BAD_KEY')
     } catch {
       return fail(400, 'BAD_KEY')
+    }
+    if (me.publicKey && me.publicKey !== publicKey && body.confirm !== true) {
+      return fail(409, 'KEY_CONFLICT', 'A different encryption key is already published for this account.')
     }
     await db.user.update({ where: { id: me.id }, data: { publicKey } })
     return ok({ success: true })

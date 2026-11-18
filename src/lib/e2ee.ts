@@ -10,8 +10,25 @@
 // - no forward secrecy / no double ratchet
 // - server-side search does not cover encrypted conversations
 
-const PRIV_KEY_STORAGE = 'mm_e2ee_priv_jwk'
+const LEGACY_PRIV_KEY = 'mm_e2ee_priv_jwk'
 const KEY_CACHE = new Map<string, CryptoKey>() // peerPubJwk -> derived AES key
+
+// The stored keypair is namespaced per account so a second person signing in
+// on the same browser can never inherit (and re-publish) the first user's
+// private key. The un-namespaced legacy key is claimed once by the first
+// account that logs in after this upgrade, then removed.
+let currentUserId: string | null = null
+
+/** Bind the E2EE module to the signed-in account (null on sign-out). Clears derived-key cache. */
+export function setE2eeUser(userId: string | null): void {
+  if (currentUserId === userId) return
+  currentUserId = userId
+  KEY_CACHE.clear()
+}
+
+function storageKey(): string {
+  return currentUserId ? `${LEGACY_PRIV_KEY}:${currentUserId}` : LEGACY_PRIV_KEY
+}
 
 function b64(buf: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(buf)))
@@ -33,7 +50,18 @@ function supported(): boolean {
 export async function ensureKeypair(): Promise<{ privateKey: CryptoKey; publicKeyJwk: string } | null> {
   if (!supported()) return null
   try {
-    const stored = localStorage.getItem(PRIV_KEY_STORAGE)
+    const key = storageKey()
+    let stored = localStorage.getItem(key)
+    if (!stored && currentUserId) {
+      // one-time migration: the first account to sign in on this browser
+      // claims the browser's legacy key (it belonged to whoever used it last)
+      const legacy = localStorage.getItem(LEGACY_PRIV_KEY)
+      if (legacy) {
+        localStorage.setItem(key, legacy)
+        localStorage.removeItem(LEGACY_PRIV_KEY)
+        stored = legacy
+      }
+    }
     if (stored) {
       const privJwk = JSON.parse(stored)
       const privateKey = await crypto.subtle.importKey('jwk', privJwk, { name: 'ECDH', namedCurve: 'P-256' }, true, [
@@ -44,7 +72,7 @@ export async function ensureKeypair(): Promise<{ privateKey: CryptoKey; publicKe
     }
     const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey'])
     const privJwk = await crypto.subtle.exportKey('jwk', pair.privateKey)
-    localStorage.setItem(PRIV_KEY_STORAGE, JSON.stringify(privJwk))
+    localStorage.setItem(key, JSON.stringify(privJwk))
     const { d: _d, ...pubJwk } = privJwk
     return { privateKey: pair.privateKey, publicKeyJwk: JSON.stringify(pubJwk) }
   } catch {
@@ -52,19 +80,23 @@ export async function ensureKeypair(): Promise<{ privateKey: CryptoKey; publicKe
   }
 }
 
-/** Publish my public key to the server (idempotent). */
-export async function publishPublicKey(): Promise<boolean> {
+/** Publish my public key to the server. 'conflict' = a different key is already
+ *  published for this account and the caller did not pass confirm. */
+export type PublishResult = 'ok' | 'conflict' | 'fail'
+
+export async function publishPublicKey(opts?: { confirm?: boolean }): Promise<PublishResult> {
   const pair = await ensureKeypair()
-  if (!pair) return false
+  if (!pair) return 'fail'
   try {
     const res = await fetch('/api/keys', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ publicKey: pair.publicKeyJwk }),
+      body: JSON.stringify({ publicKey: pair.publicKeyJwk, confirm: opts?.confirm === true }),
     })
-    return res.ok
+    if (res.status === 409) return 'conflict'
+    return res.ok ? 'ok' : 'fail'
   } catch {
-    return false
+    return 'fail'
   }
 }
 
@@ -72,7 +104,7 @@ export async function publishPublicKey(): Promise<boolean> {
 export function hasLocalKeypair(): boolean {
   if (!supported()) return false
   try {
-    return !!localStorage.getItem(PRIV_KEY_STORAGE)
+    return !!(localStorage.getItem(storageKey()) || localStorage.getItem(LEGACY_PRIV_KEY))
   } catch {
     return false
   }
@@ -81,7 +113,8 @@ export function hasLocalKeypair(): boolean {
 /** Wipe the local keypair (settings action; re-publishes a fresh one on next use). */
 export function resetLocalKeypair() {
   try {
-    localStorage.removeItem(PRIV_KEY_STORAGE)
+    localStorage.removeItem(storageKey())
+    localStorage.removeItem(LEGACY_PRIV_KEY)
   } catch {
     /* noop */
   }

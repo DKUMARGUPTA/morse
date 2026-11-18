@@ -43,12 +43,15 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     select: { messageId: true },
   })
   const hiddenIds = hidden.map((h) => h.messageId)
+  // newest 200, returned oldest-first (asc+take would return the OLDEST 200 and
+  // hide everything recent in long conversations)
   const messages = await db.message.findMany({
     where: { conversationId: id, id: { notIn: hiddenIds } },
     include: messageInclude,
-    orderBy: { createdAt: 'asc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: 200,
   })
+  messages.reverse()
 
   return ok({
     conversation: {

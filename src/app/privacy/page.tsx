@@ -36,6 +36,16 @@ export default function PrivacyPage() {
         <li className={LI}>Location data, advertising identifiers, or behavioural/advertising trackers of any kind. There are no ads and no third-party analytics scripts.</li>
       </ul>
 
+      <h2 className={H2}>What Morse can see</h2>
+      <p className={P}>
+        In end-to-end encrypted (beta) chats, we see only ciphertext — never the text. For regular
+        chats, and for every message's delivery on either setting, the server necessarily handles
+        the metadata it needs to run the service: who messaged whom and when, message size, and
+        read/delivery receipts. Message content is only ever inspected when you explicitly report a
+        message for abuse. There is no advertising, no profiling and no analytics anywhere in the
+        product.
+      </p>
+
       <h2 className={H2}>End-to-end encryption (beta)</h2>
       <p className={P}>
         When you enable E2EE on a chat, messages are encrypted in your browser with AES-GCM using a

@@ -176,6 +176,8 @@ export function AuthView() {
           </form>
         </div>
 
+        <p className="mt-4 text-center text-xs text-[#8CA3C7]">{tr('trustLine')}</p>
+
         <button
           onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
           className="mt-5 text-center text-sm text-[#8CA3C7] hover:text-[#C9D6F2]"

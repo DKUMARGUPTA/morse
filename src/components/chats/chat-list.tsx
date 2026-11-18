@@ -4,7 +4,7 @@
 // Phase 2: groups, pin/mute, and message search across conversations.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Search, MessageCircle, Bell, Pin, BellOff, Lock } from 'lucide-react'
+import { Plus, Search, MessageCircle, Bell, Pin, BellOff, Lock, WifiOff } from 'lucide-react'
 import { Avatar, GroupAvatar, systemText } from '@/components/shared'
 import { ConversationView } from '@/components/chats/conversation-view'
 import { NewChatDialog } from '@/components/chats/new-chat-dialog'
@@ -18,6 +18,8 @@ export function ChatList() {
   const tr = useApp((s) => s.tr)
   const conversations = useApp((s) => s.conversations)
   const conversationsLoaded = useApp((s) => s.conversationsLoaded)
+  const convLoadError = useApp((s) => s.convLoadError)
+  const loadConversations = useApp((s) => s.loadConversations)
   const activeId = useApp((s) => s.activeId)
   const openConversation = useApp((s) => s.openConversation)
   const e2eeTexts = useApp((s) => s.e2eeTexts)
@@ -122,6 +124,19 @@ export function ChatList() {
               {[0, 1, 2].map((i) => (
                 <div key={i} className="h-14 animate-pulse rounded-xl bg-[#101B33]" />
               ))}
+            </div>
+          ) : filtered.length === 0 && hits.length === 0 && convLoadError && conversations.length === 0 && !q.trim() ? (
+            <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[#1E2C4F] bg-[#101B33]">
+                <WifiOff className="h-7 w-7 text-[#22D3EE]" />
+              </div>
+              <p className="font-semibold">{tr('errLoadChats')}</p>
+              <button
+                onClick={() => void loadConversations()}
+                className="mt-1 h-10 rounded-xl bg-[#22D3EE] px-4 text-sm font-semibold text-[#06121F] hover:bg-[#67E8F9]"
+              >
+                {tr('retry')}
+              </button>
             </div>
           ) : filtered.length === 0 && hits.length === 0 ? (
             <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
