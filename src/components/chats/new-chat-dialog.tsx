@@ -135,7 +135,7 @@ function InvitePanel({ myName }: { myName: string }) {
             {qr ? (
               <img src={qr} alt={`QR code for invitation ${latestCode}`} className="rounded-lg" width={180} height={180} />
             ) : (
-              <QrCode className="h-16 w-16 text-[#3D527A]" />
+              <QrCode className="h-16 w-16 text-[#8CA3C7]" />
             )}
           </div>
           <p className="break-all text-center font-mono text-xs text-[#C9D6F2]">{url}</p>
@@ -226,7 +226,7 @@ function PeoplePanel({ onPicked }: { onPicked: () => void }) {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder={tr('searchUsers')}
-        className="h-10 border-[#1E2C4F] bg-[#0A1224] placeholder:text-[#3D527A]"
+        className="h-10 border-[#1E2C4F] bg-[#0A1224] placeholder:text-[#8CA3C7]"
       />
       <div className="max-h-72 space-y-1 overflow-y-auto">
         {users.length === 0 ? (
@@ -306,14 +306,14 @@ function GroupPanel({ onCreated }: { onCreated: () => void }) {
         placeholder={tr('groupNamePlaceholder')}
         aria-label={tr('groupName')}
         maxLength={60}
-        className="h-10 border-[#1E2C4F] bg-[#0A1224] placeholder:text-[#3D527A]"
+        className="h-10 border-[#1E2C4F] bg-[#0A1224] placeholder:text-[#8CA3C7]"
       />
       <Input
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder={tr('searchUsers')}
         aria-label={tr('pickMembers')}
-        className="h-10 border-[#1E2C4F] bg-[#0A1224] placeholder:text-[#3D527A]"
+        className="h-10 border-[#1E2C4F] bg-[#0A1224] placeholder:text-[#8CA3C7]"
       />
       {picked.length > 0 && (
         <div className="flex flex-wrap gap-1.5">

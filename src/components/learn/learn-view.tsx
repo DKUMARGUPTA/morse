@@ -212,7 +212,7 @@ function Quiz() {
                 !revealed && 'border-[#1E2C4F] bg-[#0C1428] text-[#E7EEFB] hover:border-[#22D3EE]/60',
                 revealed && isRight && 'border-emerald-400 bg-emerald-400/10 text-emerald-300',
                 revealed && !isRight && opt === answer && 'border-red-400 bg-red-400/10 text-red-300',
-                revealed && !isRight && opt !== answer && 'border-[#1E2C4F] bg-[#0C1428] text-[#3D527A]'
+                revealed && !isRight && opt !== answer && 'border-[#1E2C4F] bg-[#0C1428] text-[#8CA3C7]'
               )}
             >
               <span className="flex items-center gap-1.5">
@@ -444,7 +444,7 @@ function ActivityStrip() {
                   level === 3 && 'bg-[#22D3EE]'
                 )}
               />
-              <span className="text-[8px] text-[#3D527A]">{c.date.slice(8)}</span>
+              <span className="text-[8px] text-[#8CA3C7]">{c.date.slice(8)}</span>
             </div>
           )
         })}
@@ -484,7 +484,7 @@ function Achievements() {
               b.earned ? 'border-[#22D3EE]/60 bg-[#22D3EE]/10' : 'border-[#1E2C4F] bg-[#0A1224] opacity-50'
             )}
           >
-            <Award className={cn('h-5 w-5', b.earned ? 'text-[#22D3EE]' : 'text-[#3D527A]')} />
+            <Award className={cn('h-5 w-5', b.earned ? 'text-[#22D3EE]' : 'text-[#8CA3C7]')} />
             <p className={cn('text-xs font-semibold', b.earned ? 'text-[#22D3EE]' : 'text-[#8CA3C7]')}>
               {tr(b.key)}
             </p>

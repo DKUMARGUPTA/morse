@@ -606,6 +606,9 @@ export const useApp = create<AppState>((set, get) => ({
       if (res.ok) {
         const data = await res.json()
         set({ settings: data })
+      } else {
+        // server kept the old values — mirror that locally
+        set({ settings: prev })
       }
     } catch {
       set({ settings: prev })

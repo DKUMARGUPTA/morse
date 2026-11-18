@@ -72,7 +72,7 @@ export function PwaInstallBanner() {
           <button
             onClick={dismiss}
             aria-label={tr('later')}
-            className="rounded-lg p-1 text-[#3D527A] transition-colors hover:text-[#8CA3C7]"
+            className="rounded-lg p-1 text-[#8CA3C7] transition-colors hover:text-[#8CA3C7]"
           >
             <X className="h-4 w-4" />
           </button>
@@ -181,7 +181,7 @@ export function PwaInstallSection() {
           </div>
         )}
 
-        <p className="text-[10px] text-[#3D527A]">PWA · display: standalone · offline-ready</p>
+        <p className="text-[10px] text-[#8CA3C7]">PWA · display: standalone · offline-ready</p>
       </div>
     </SectionCard>
   )

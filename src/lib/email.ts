@@ -29,10 +29,10 @@ function verificationEmailHtml(link: string): string {
     <a href="${link}" style="display:inline-block;background:#22D3EE;color:#0A1224;font-weight:700;font-size:14px;text-decoration:none;padding:12px 28px;border-radius:12px;">
       Verify email
     </a>
-    <p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#3D527A;word-break:break-all;">
+    <p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#8CA3C7;word-break:break-all;">
       Or paste this link into your browser:<br/>${link}
     </p>
-    <p style="margin:24px 0 0;font-size:11px;color:#3D527A;">
+    <p style="margin:24px 0 0;font-size:11px;color:#8CA3C7;">
       Didn&#8217;t sign up? You can safely ignore this email.
     </p>
   </div>

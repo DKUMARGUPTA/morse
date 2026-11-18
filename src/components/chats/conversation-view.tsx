@@ -110,7 +110,7 @@ export function ConversationView({ conv, onBack }: { conv: ConversationDTO; onBa
     : isGroup
       ? `${conv.members.length} ${tr('members')}`
       : online
-        ? 'online'
+        ? tr('online')
         : ''
 
   return (
@@ -133,7 +133,7 @@ export function ConversationView({ conv, onBack }: { conv: ConversationDTO; onBa
           <p className="flex items-center gap-1.5 truncate text-sm font-semibold">
             <span className="truncate">{title}</span>
             {conv.e2eeEnabled && <Lock className="h-3.5 w-3.5 shrink-0 text-[#22D3EE]" aria-label={tr('e2eeToggle')} />}
-            {isGroup && <Info className="h-3.5 w-3.5 shrink-0 text-[#3D527A]" />}
+            {isGroup && <Info className="h-3.5 w-3.5 shrink-0 text-[#8CA3C7]" />}
           </p>
           <p className="truncate text-[11px] text-[#8CA3C7]">
             {typing ? <span className="text-[#22D3EE]">{subtitle}</span> : subtitle}
@@ -322,7 +322,7 @@ export function ConversationView({ conv, onBack }: { conv: ConversationDTO; onBa
               value={reportReason}
               onChange={(e) => setReportReason(e.target.value)}
               placeholder={tr('reportReason')}
-              className="h-10 border-[#1E2C4F] bg-[#0A1224] placeholder:text-[#3D527A]"
+              className="h-10 border-[#1E2C4F] bg-[#0A1224] placeholder:text-[#8CA3C7]"
             />
             <button
               onClick={() => void submitReport()}
@@ -473,7 +473,7 @@ function AddMembersDialog({ conv, onClose }: { conv: ConversationDTO; onClose: (
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={tr('searchUsers')}
-            className="h-10 border-[#1E2C4F] bg-[#0A1224] placeholder:text-[#3D527A]"
+            className="h-10 border-[#1E2C4F] bg-[#0A1224] placeholder:text-[#8CA3C7]"
           />
           {picked.length > 0 && (
             <div className="flex flex-wrap gap-1.5">

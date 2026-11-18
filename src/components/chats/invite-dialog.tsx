@@ -94,7 +94,7 @@ export function InviteDialog({ code, onClose }: { code: string; onClose: () => v
               <div>
                 <p className="text-xs text-[#8CA3C7]">{tr('invitedBy')}</p>
                 <p className="font-semibold">{preview.creator.displayName}</p>
-                <p className="mt-0.5 font-mono text-[10px] text-[#3D527A]">#{preview.code}</p>
+                <p className="mt-0.5 font-mono text-[10px] text-[#8CA3C7]">#{preview.code}</p>
               </div>
             </div>
 

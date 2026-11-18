@@ -131,7 +131,7 @@ export function AuthView() {
                   placeholder="Aarav"
                   maxLength={40}
                   autoComplete="name"
-                  className="h-11 border-[#1E2C4F] bg-[#0A1224] text-[#E7EEFB] placeholder:text-[#3D527A] focus-visible:ring-[#22D3EE]"
+                  className="h-11 border-[#1E2C4F] bg-[#0A1224] text-[#E7EEFB] placeholder:text-[#8CA3C7] focus-visible:ring-[#22D3EE]"
                 />
               </div>
             )}
@@ -144,7 +144,7 @@ export function AuthView() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 autoComplete="email"
-                className="h-11 border-[#1E2C4F] bg-[#0A1224] text-[#E7EEFB] placeholder:text-[#3D527A] focus-visible:ring-[#22D3EE]"
+                className="h-11 border-[#1E2C4F] bg-[#0A1224] text-[#E7EEFB] placeholder:text-[#8CA3C7] focus-visible:ring-[#22D3EE]"
               />
             </div>
             <div className="space-y-1.5">
@@ -156,7 +156,7 @@ export function AuthView() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••"
                 autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                className="h-11 border-[#1E2C4F] bg-[#0A1224] text-[#E7EEFB] placeholder:text-[#3D527A] focus-visible:ring-[#22D3EE]"
+                className="h-11 border-[#1E2C4F] bg-[#0A1224] text-[#E7EEFB] placeholder:text-[#8CA3C7] focus-visible:ring-[#22D3EE]"
               />
             </div>
 

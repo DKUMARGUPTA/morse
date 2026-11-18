@@ -105,13 +105,13 @@ export function ChatList() {
         </header>
         <div className="px-4 pb-2">
           <div className="flex items-center gap-2 rounded-xl border border-[#1E2C4F] bg-[#0C1428] px-3">
-            <Search className="h-4 w-4 shrink-0 text-[#3D527A]" />
+            <Search className="h-4 w-4 shrink-0 text-[#8CA3C7]" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder={tr('searchChats')}
               aria-label={tr('searchChats')}
-              className="h-10 w-full bg-transparent text-sm text-[#E7EEFB] placeholder:text-[#3D527A] focus:outline-none"
+              className="h-10 w-full bg-transparent text-base text-[#E7EEFB] placeholder:text-[#8CA3C7]/60 focus:outline-none md:text-sm"
             />
           </div>
         </div>
@@ -188,7 +188,7 @@ export function ChatList() {
 
               {hits.length > 0 && (
                 <div className="mt-3">
-                  <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-[#3D527A]">
+                  <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-[#8CA3C7]">
                     {tr('messagesFound')}
                   </p>
                   {hits.map((h) => (
@@ -201,7 +201,7 @@ export function ChatList() {
                         <p className="truncate text-xs font-semibold text-[#C9D6F2]">
                           {h.convTitle} · {h.senderName}
                         </p>
-                        <span className="shrink-0 text-[10px] text-[#3D527A]">
+                        <span className="shrink-0 text-[10px] text-[#8CA3C7]">
                           {formatTime(h.createdAt, useApp.getState().settings?.language ?? 'en')}
                         </span>
                       </div>

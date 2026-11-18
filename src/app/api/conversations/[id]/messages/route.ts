@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { emitToRoom, fail, isResponse, messageInclude, messageToDTO, ok, requireUser, userRoom } from '@/lib/api-helpers'
 import { notifyPushRecipients } from '@/lib/push-server'
+import { rateLimit } from '@/lib/rate-limit'
 import { textToMorse } from '@/lib/morse'
 
 /** POST /api/conversations/[id]/messages — send a text/morse message */
@@ -9,6 +10,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const me = await requireUser()
   if (isResponse(me)) return me
   const { id } = await ctx.params
+  // per-user send throttle (best-effort; in-memory per instance)
+  if (!rateLimit(`msg:${me.id}`, 30, 60_000)) return fail(429, 'RATE_LIMITED')
   try {
     const body = await req.json()
     const text = String(body.text ?? '').trim()

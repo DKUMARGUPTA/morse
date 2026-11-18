@@ -105,7 +105,7 @@ function Translator() {
           onChange={(e) => setInput(e.target.value)}
           rows={3}
           aria-label={direction === 't2m' ? tr('textToMorse') : tr('morseToText')}
-          className="w-full resize-none rounded-xl border border-[#1E2C4F] bg-[#0C1428] p-3 text-sm text-[#E7EEFB] placeholder:text-[#3D527A] focus:outline-none focus:ring-1 focus:ring-[#22D3EE]"
+          className="w-full resize-none rounded-xl border border-[#1E2C4F] bg-[#0C1428] p-3 text-sm text-[#E7EEFB] placeholder:text-[#8CA3C7] focus:outline-none focus:ring-1 focus:ring-[#22D3EE]"
           placeholder={direction === 't2m' ? 'HELLO' : '.... . .-.. .-.. ---'}
         />
       </div>

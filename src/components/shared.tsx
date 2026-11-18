@@ -26,7 +26,7 @@ export function Avatar({
   }
   const initials = user.displayName
     .split(/\s+/)
-    .map((p) => p[0])
+    .map((p) => Array.from(p)[0] ?? '')
     .filter(Boolean)
     .slice(0, 2)
     .join('')

@@ -265,7 +265,7 @@ export function SettingsView() {
             <p>{tr('aboutBody2')}</p>
             <p>{tr('aboutBody3')}</p>
             {!canVibrate() && <p>{tr('noVibrationSupport')}</p>}
-            <p className="pt-1 font-mono text-[10px] text-[#3D527A]">Morse Messenger · MVP build · PWA</p>
+            <p className="pt-1 font-mono text-[10px] text-[#8CA3C7]">Morse Messenger · MVP build · PWA</p>
           </div>
         </SectionCard>
       </div>
@@ -281,7 +281,7 @@ export function SettingsView() {
             value={deleteConfirm}
             onChange={(e) => setDeleteConfirm(e.target.value)}
             placeholder={tr('deleteAccountConfirm')}
-            className="h-10 border-[#1E2C4F] bg-[#0A1224] placeholder:text-[#3D527A]"
+            className="h-10 border-[#1E2C4F] bg-[#0A1224] placeholder:text-[#8CA3C7]"
           />
           <AlertDialogFooter>
             <AlertDialogCancel className="border-[#1E2C4F] bg-transparent text-[#C9D6F2] hover:bg-[#0A1224]">

@@ -135,7 +135,7 @@ export function TelegraphPad({ onSend, compact }: { onSend?: (text: string) => v
             : 'border-[#1E2C4F] bg-[#0A1224] hover:border-[#22D3EE]/50'
         )}
       >
-        <span className={cn('font-mono text-3xl', pressed ? 'text-[#22D3EE]' : 'text-[#3D527A]')}>
+        <span className={cn('font-mono text-3xl', pressed ? 'text-[#22D3EE]' : 'text-[#8CA3C7]')}>
           {pressed ? '▼' : lastKey === '-' ? '—' : lastKey === '.' ? '•' : '▼'}
         </span>
         <span className="px-4 text-center text-xs text-[#8CA3C7]">{tr('tapHold')}</span>

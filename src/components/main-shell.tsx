@@ -89,7 +89,7 @@ export function MainShell() {
           ))}
           <PwaInstallSidebarButton />
         </div>
-        <div className="mt-auto px-2 text-[10px] leading-relaxed text-[#3D527A]">
+        <div className="mt-auto px-2 text-[10px] leading-relaxed text-[#8CA3C7]">
           Morse code is encoding, not encryption.
         </div>
       </nav>
@@ -97,7 +97,7 @@ export function MainShell() {
       {/* content column */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* mobile header */}
-        <header className="flex items-center justify-between border-b border-[#1E2C4F] bg-[#0C1428] px-4 py-3 md:hidden">
+        <header className="flex items-center justify-between border-b border-[#1E2C4F] bg-[#0C1428] px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] md:hidden">
           <div className="flex items-center gap-2">
             <svg width="18" height="18" viewBox="0 0 26 26" fill="none" aria-hidden>
               <circle cx="4" cy="13" r="2.4" fill="#22D3EE" />
@@ -126,7 +126,7 @@ export function MainShell() {
         <VerifyEmailBanner />
         <NotificationPrompt />
 
-        <main className="min-h-0 flex-1 overflow-hidden pb-16 md:pb-0">
+        <main className="min-h-0 flex-1 overflow-hidden pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
           {tab === 'chats' && <ChatList />}
           {tab === 'morse' && <MorseStudio />}
           {tab === 'learn' && <LearnView />}

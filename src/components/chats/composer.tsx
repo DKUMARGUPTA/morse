@@ -35,11 +35,14 @@ export function Composer({
   const [keyOpen, setKeyOpen] = useState(false)
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [sending, setSending] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const typingRef = useRef<{ on: boolean; at: number }>({ on: false, at: 0 })
   const { play } = useSignalPlayer()
 
   const editMessage = useApp((s) => s.editMessage)
+  // decrypted text for the reply banner (replyTo.text may be ciphertext)
+  const replyE2eeText = useApp((s) => (s.replyTo ? s.e2eeTexts[s.replyTo.id] : undefined))
 
   // allow bubble menu to start an edit session
   useEffect(() => {
@@ -69,18 +72,32 @@ export function Composer({
 
   async function submit() {
     const text = draft.trim()
-    if (!text || !canSend) return
+    if (!text || !canSend || sending) return
+    setError(null)
+    setSending(true)
     setDraft(conversationId, '')
     emitTyping(conversationId, me?.displayName ?? '', false)
     typingRef.current = { on: false, at: 0 }
-    if (editing) {
-      const okEdit = await editMessage(editing.id, text)
-      if (!okEdit) setError(tr('editWindowNote'))
-      setEditing(null)
-      return
+    try {
+      if (editing) {
+        const okEdit = await editMessage(editing.id, text)
+        if (!okEdit) {
+          // put the text back — losing it would be worse than the error
+          setDraft(conversationId, text)
+          setError(tr('errEdit'))
+        }
+        setEditing(null)
+        return
+      }
+      const okSend = await sendMessage(text, mode, mode === 'text' ? null : channel)
+      if (!okSend) {
+        // restore the draft so a failed send never destroys typed text
+        setDraft(conversationId, text)
+        setError(tr('errNetwork'))
+      }
+    } finally {
+      setSending(false)
     }
-    const okSend = await sendMessage(text, mode, mode === 'text' ? null : channel)
-    if (!okSend) setError(tr('errNetwork'))
   }
 
   const modeLabels: Record<SendMode, string> = {
@@ -103,9 +120,9 @@ export function Composer({
         <div className="flex items-center justify-between gap-2 border-b border-[#1E2C4F]/60 px-4 py-2">
           <div className="min-w-0 border-l-2 border-[#22D3EE] pl-2 text-xs">
             <p className="font-semibold text-[#22D3EE]">{tr('replyTo')}: {replyTo.senderName}</p>
-            <p className="truncate text-[#8CA3C7]">{replyTo.text}</p>
+            <p className="truncate text-[#8CA3C7]">{replyE2eeText ?? `🔒 ${tr('e2eeEncryptedMsg')}`}</p>
           </div>
-          <button onClick={() => setReplyTo(null)} aria-label="Cancel reply" className="p-1 text-[#8CA3C7] hover:text-[#C9D6F2]">
+          <button onClick={() => setReplyTo(null)} aria-label={tr('cancelReply')} className="p-2 text-[#8CA3C7] hover:text-[#C9D6F2]">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -120,8 +137,8 @@ export function Composer({
               setEditing(null)
               setDraft(conversationId, '')
             }}
-            aria-label="Cancel edit"
-            className="p-1 text-[#8CA3C7] hover:text-[#C9D6F2]"
+            aria-label={tr('cancelEdit')}
+            className="p-2 text-[#8CA3C7] hover:text-[#C9D6F2]"
           >
             <X className="h-4 w-4" />
           </button>
@@ -176,13 +193,13 @@ export function Composer({
           rows={1}
           placeholder={tr('typeMessage')}
           aria-label={tr('typeMessage')}
-          className="max-h-28 min-h-10 flex-1 resize-none rounded-xl border border-[#1E2C4F] bg-[#0A1224] px-3 py-2.5 text-sm text-[#E7EEFB] placeholder:text-[#3D527A] focus:outline-none focus:ring-1 focus:ring-[#22D3EE]"
+          className="max-h-28 min-h-10 flex-1 resize-none rounded-xl border border-[#1E2C4F] bg-[#0A1224] px-3 py-2.5 text-base text-[#E7EEFB] placeholder:text-[#8CA3C7]/60 focus:outline-none focus:ring-1 focus:ring-[#22D3EE] md:text-sm"
         />
 
         <button
           onClick={submit}
-          disabled={!canSend}
-          aria-label="Send"
+          disabled={!canSend || sending}
+          aria-label={tr('send')}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#22D3EE] text-[#06121F] transition hover:bg-[#67E8F9] disabled:opacity-40"
         >
           <Send className="h-4.5 w-4.5" />
