@@ -191,6 +191,12 @@ export function AuthView() {
           <Circle className="h-3 w-3 fill-current" />
           <Minus className="h-3 w-6" />
         </div>
+
+        <p className="mt-6 text-center text-xs text-[#8CA3C7]">
+          <a href="/privacy" className="hover:text-[#C9D6F2] hover:underline">Privacy Policy</a>
+          <span className="mx-2">·</span>
+          <a href="/terms" className="hover:text-[#C9D6F2] hover:underline">Terms of Service</a>
+        </p>
       </main>
     </div>
   )

@@ -193,7 +193,7 @@ export function Composer({
           rows={1}
           placeholder={tr('typeMessage')}
           aria-label={tr('typeMessage')}
-          className="max-h-28 min-h-10 flex-1 resize-none rounded-xl border border-[#1E2C4F] bg-[#0A1224] px-3 py-2.5 text-base text-[#E7EEFB] placeholder:text-[#8CA3C7]/60 focus:outline-none focus:ring-1 focus:ring-[#22D3EE] md:text-sm"
+          className="max-h-28 min-h-10 flex-1 resize-none rounded-xl border border-[#1E2C4F] bg-[#0A1224] px-3 py-2.5 text-base text-[#E7EEFB] placeholder:text-[#8CA3C7] focus:outline-none focus:ring-1 focus:ring-[#22D3EE] md:text-sm"
         />
 
         <button

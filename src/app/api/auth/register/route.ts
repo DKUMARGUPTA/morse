@@ -3,7 +3,7 @@ import { after } from 'next/server'
 import { db } from '@/lib/db'
 import { hashPassword, setSessionCookie } from '@/lib/auth'
 import { fail } from '@/lib/api-helpers'
-import { clientIp, rateLimit } from '@/lib/rate-limit'
+import { clientIp, dbRateLimit } from '@/lib/rate-limit'
 import { newVerificationToken, verificationExpiry } from '@/lib/verification'
 import { sendVerificationEmail } from '@/lib/email'
 
@@ -16,13 +16,15 @@ export async function POST(req: NextRequest) {
     const password = String(body.password ?? '')
     const displayName = String(body.displayName ?? '').trim()
 
-    // signup abuse guard: 5/min per IP
-    if (!rateLimit(`register:${clientIp(req)}`, 5, 60_000)) {
+    // signup abuse guard: 5/min per IP (DB-backed — survives serverless churn)
+    if (!(await dbRateLimit(`register:${clientIp(req)}`, 5, 60_000))) {
       return fail(429, 'TOO_MANY_ATTEMPTS', 'Too many attempts. Try again in a minute.')
     }
 
     if (!email || !password) return fail(400, 'MISSING_FIELDS', 'Email and password are required.')
     if (!displayName) return fail(400, 'MISSING_NAME', 'Display name is required.')
+    if (email.length > 254) return fail(400, 'BAD_EMAIL', 'Enter a valid email address.')
+    if (displayName.length > 40) return fail(400, 'NAME_TOO_LONG', 'Display name must be 40 characters or fewer.')
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(400, 'BAD_EMAIL', 'Enter a valid email address.')
     if (password.length < 6) return fail(400, 'WEAK_PASSWORD', 'Password must be at least 6 characters.')
 

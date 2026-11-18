@@ -25,11 +25,18 @@ export async function PATCH(req: NextRequest) {
     for (const key of ['readReceipts', 'soundEnabled', 'vibrationEnabled'] as const) {
       if (body[key] !== undefined) patch[key] = !!body[key]
     }
-    for (const key of ['wpm', 'frequency', 'volume'] as const) {
+    // server-side clamps: the client UI clamps too, but a crafted PATCH must
+    // never persist volume=9999 / wpm=-5 / frequency=999999999 (live-tested)
+    const RANGES: Record<string, [number, number]> = {
+      wpm: [1, 40],
+      frequency: [200, 3000],
+      volume: [0, 100],
+    }
+    for (const [key, [min, max]] of Object.entries(RANGES)) {
       if (body[key] !== undefined) {
         const n = Number(body[key])
-        if (Number.isNaN(n)) return fail(400, 'BAD_NUMBER')
-        patch[key] = Math.round(n)
+        if (!Number.isFinite(n)) return fail(400, 'BAD_NUMBER')
+        patch[key] = Math.min(max, Math.max(min, Math.round(n)))
       }
     }
     const settings = await db.userSettings.upsert({

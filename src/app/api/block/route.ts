@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { isResponse, ok, requireUser } from '@/lib/api-helpers'
+import { fail, isResponse, ok, requireUser } from '@/lib/api-helpers'
 
 /** GET /api/block — list of users I blocked */
 export async function GET() {
@@ -18,9 +18,14 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const me = await requireUser()
   if (isResponse(me)) return me
-  const body = await req.json()
-  const userId = String(body.userId ?? '')
-  if (!userId || userId === me.id) return ok({ success: true })
+  const body = await req.json().catch(() => null)
+  if (!body || typeof body !== 'object') return fail(400, 'BAD_JSON')
+  const userId = String((body as Record<string, unknown>).userId ?? '')
+  if (!userId) return fail(400, 'MISSING_USER')
+  if (userId === me.id) return ok({ success: true })
+  // a bogus id used to surface as a raw FK-error 500 — validate the target first
+  const target = await db.user.findUnique({ where: { id: userId }, select: { id: true } })
+  if (!target) return fail(404, 'USER_NOT_FOUND')
   await db.block.upsert({
     where: { blockerId_blockedId: { blockerId: me.id, blockedId: userId } },
     update: {},
@@ -33,8 +38,10 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const me = await requireUser()
   if (isResponse(me)) return me
-  const body = await req.json()
-  const userId = String(body.userId ?? '')
+  const body = await req.json().catch(() => null)
+  if (!body || typeof body !== 'object') return fail(400, 'BAD_JSON')
+  const userId = String((body as Record<string, unknown>).userId ?? '')
+  if (!userId) return fail(400, 'MISSING_USER')
   await db.block.deleteMany({ where: { blockerId: me.id, blockedId: userId } })
   return ok({ success: true })
 }

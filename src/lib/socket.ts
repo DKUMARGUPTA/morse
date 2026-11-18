@@ -53,7 +53,13 @@ export function useSocket() {
       return ''
     }
 
-    // one handler set for both transports — the wire contract is identical
+    // One handler set for both transports — the wire contract is identical.
+    // supabaseTransport: Supabase topics are public broadcast channels joined
+    // with the anon key, and the server only ever sends metadata stubs there
+    // (see api-helpers.buildSupabaseBody). A full message DTO arriving on that
+    // transport can only be a forged client broadcast — never trusted.
+    let supabaseTransport = false
+
     const registerAll: RegisterAll = (subscribe) => {
       subscribe('presence', (d) => {
         useApp.getState().setPresence(String(d.userId ?? ''), !!d.online)
@@ -65,15 +71,17 @@ export function useSocket() {
       subscribe('message:new', (d) => {
         const msg = d.message as MessageDTO | undefined
         if (msg?.id) {
+          if (supabaseTransport) return
           void useApp.getState().applyMessageNew(String(d.conversationId ?? ''), msg)
         } else {
-          // oversized broadcast came through as a stub — refetch the conversation
-          void useApp.getState().reloadConversation(String(d.conversationId ?? ''))
+          // metadata-only broadcast (stub) — refetch and apply with notifications
+          void useApp.getState().applyMessageStub(String(d.conversationId ?? ''))
         }
       })
       subscribe('message:update', (d) => {
         const msg = d.message as MessageDTO | undefined
         if (msg?.id) {
+          if (supabaseTransport) return
           useApp.getState().applyMessageUpdate(String(d.conversationId ?? ''), msg)
         } else {
           void useApp.getState().reloadConversation(String(d.conversationId ?? ''))
@@ -130,8 +138,10 @@ export function useSocket() {
     } else if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       // ---------- production transport B: Supabase Realtime broadcast ----------
       // Raw Phoenix-protocol WebSocket, zero dependencies, no extra infra.
-      // Fanout comes from the API via the Supabase broadcast HTTP endpoint.
+      // Fanout comes from the API via the Supabase broadcast HTTP endpoint —
+      // metadata stubs only (message bodies are refetched over the API).
       useApp.getState().setSocketAvailable(true)
+      supabaseTransport = true
       const sb = new SupabaseRealtimeSocket(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,

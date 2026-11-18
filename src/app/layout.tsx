@@ -19,6 +19,22 @@ export const metadata: Metadata = {
     "Global chat with Morse code communication: convert messages to Morse, send them through sound, screen light or vibration, and learn Morse interactively.",
   applicationName: "Morse Messenger",
   manifest: "/manifest.webmanifest",
+  metadataBase: new URL("https://morse-ashen.vercel.app"),
+  openGraph: {
+    type: "website",
+    siteName: "Morse Messenger",
+    title: "Morse Messenger — Chat normally. Talk in Morse.",
+    description:
+      "Invitation-only encrypted messenger: no phone number, no contacts upload, no ads. Message in Morse through sound, light or vibration.",
+    url: "/",
+    images: [{ url: "/icon-192.png", width: 192, height: 192, alt: "Morse Messenger" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "Morse Messenger — Chat normally. Talk in Morse.",
+    description: "Invitation-only encrypted messenger: no phone number, no contacts upload, no ads.",
+    images: ["/icon-192.png"],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

@@ -65,33 +65,42 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ code: stri
     })
     if (block) return fail(403, 'BLOCKED', 'Blocked users cannot start new conversations.')
 
-    const existing = await db.invitation.findUnique({
-      where: { id: invitation.id },
-    })
-    if (existing?.acceptedById) return fail(409, 'ALREADY_USED', 'This invitation was already used.')
-
     const creator = await db.user.findUnique({ where: { id: invitation.createdById } })
     if (!creator) return fail(404, 'NOT_FOUND')
 
-    const conv = await db.conversation.create({
-      data: {
-        members: { create: [{ userId: me.id }, { userId: creator.id }] },
-        messages: {
-          create: {
-            senderId: me.id,
-            kind: 'system',
-            text: 'CHAT_STARTED_VIA_INVITATION',
-          },
-        },
-      },
-    })
-    await db.invitation.update({
-      where: { id: invitation.id },
+    // Single-use gate: atomically claim the invitation while it is still
+    // pending. Two concurrent accepts race on this conditional update —
+    // exactly one wins, the loser gets ALREADY_USED (was a duplicate-chat race).
+    const claim = await db.invitation.updateMany({
+      where: { id: invitation.id, status: 'pending' },
       data: { status: 'accepted', acceptedById: me.id },
     })
+    if (claim.count === 0) return fail(409, 'ALREADY_USED', 'This invitation was already used.')
 
-    emitToRoom(userRoom(creator.id), 'conv:new', { conversationId: conv.id })
-    return ok({ conversationId: conv.id })
+    try {
+      const conv = await db.conversation.create({
+        data: {
+          members: { create: [{ userId: me.id }, { userId: creator.id }] },
+          messages: {
+            create: {
+              senderId: me.id,
+              kind: 'system',
+              text: 'CHAT_STARTED_VIA_INVITATION',
+            },
+          },
+        },
+      })
+
+      emitToRoom(userRoom(creator.id), 'conv:new', { conversationId: conv.id })
+      return ok({ conversationId: conv.id })
+    } catch (err) {
+      // conversation creation failed (creator deleted mid-flight etc.) —
+      // release the claim so the invitation is not stranded as 'accepted'
+      await db.invitation
+        .updateMany({ where: { id: invitation.id, acceptedById: me.id }, data: { status: 'pending', acceptedById: null } })
+        .catch(() => undefined)
+      throw err
+    }
   }
 
   return fail(400, 'BAD_ACTION')

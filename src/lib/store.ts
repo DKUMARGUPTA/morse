@@ -70,6 +70,9 @@ interface AppState {
   openConversation: (id: string) => Promise<void>
   /** refetch one conversation's messages (used for oversized realtime stubs) */
   reloadConversation: (id: string, opts?: { skipListRefresh?: boolean }) => Promise<void>
+  /** metadata-only realtime stub arrived: refetch and apply new messages with
+   *  the same notification behaviour as applyMessageNew (one chime/bell per stub) */
+  applyMessageStub: (conversationId: string) => Promise<void>
   closeConversation: () => void
   startConversationWith: (userId: string) => Promise<string | null>
   sendMessage: (text: string, sendMode: SendMode, playMode: PlayMode | null) => Promise<boolean>
@@ -317,6 +320,84 @@ export const useApp = create<AppState>((set, get) => ({
       if (!opts?.skipListRefresh) void get().loadConversations()
     } catch {
       // network error — next realtime event or refresh recovers
+    }
+  },
+
+  // Realtime on the Supabase transport is metadata-only (public topics — see
+  // api-helpers.buildSupabaseBody). On a stub we refetch the conversation and
+  // apply whatever is genuinely new, keeping applyMessageNew's notification
+  // behaviour but collapsing a burst of messages into one chime/bell.
+  applyMessageStub: async (conversationId) => {
+    const { me, activeId } = get()
+    if (!me || !conversationId) return
+    try {
+      const res = await fetch(`/api/conversations/${conversationId}`)
+      if (!res.ok) return
+      const data = (await res.json()) as { messages: MessageDTO[] }
+      const incoming = Array.isArray(data.messages) ? data.messages : []
+      const known = new Set((get().messages[conversationId] ?? []).map((m) => m.id))
+      const fresh = incoming.filter((m) => !known.has(m.id))
+      const latest = incoming[incoming.length - 1]
+
+      set((s) => ({ messages: { ...s.messages, [conversationId]: incoming } }))
+      void get().decryptMessages(incoming)
+
+      const conv = get().conversations.find((c) => c.id === conversationId)
+      const freshForMe = fresh.filter((m) => m.senderId !== me.id && m.kind !== 'system')
+      if (fresh.length > 0) {
+        set((s) => ({
+          conversations: s.conversations.some((c) => c.id === conversationId)
+            ? s.conversations.map((c) =>
+                c.id === conversationId && latest
+                  ? {
+                      ...c,
+                      lastMessage: { id: latest.id, kind: latest.kind, text: latest.text, morse: latest.morse, encrypted: latest.encrypted, senderId: latest.senderId, createdAt: latest.createdAt },
+                      updatedAt: latest.createdAt,
+                      unreadCount:
+                        activeId === conversationId || c.muted || freshForMe.length === 0
+                          ? c.unreadCount
+                          : c.unreadCount + freshForMe.length,
+                    }
+                  : c
+              )
+            : s.conversations,
+        }))
+      }
+
+      const newest = freshForMe[freshForMe.length - 1]
+      if (newest && !conv?.muted) {
+        const preview = newest.encrypted ? (get().e2eeTexts[newest.id] ?? '') : newest.text
+        if (activeId !== conversationId) {
+          get().addNotification({
+            type: 'message',
+            titleKey: 'notifNewMessage',
+            body: `${newest.senderName}: ${(preview || '···').slice(0, 60)}`,
+            conversationId,
+          })
+        }
+        const settings = get().settings
+        if (settings?.soundEnabled) playChime(settings.volume)
+        if (settings?.vibrationEnabled) vibrate(60)
+        if (isAppHidden()) {
+          void notifyIncomingMessage({
+            title: newest.senderName,
+            body: (preview || '···').slice(0, 80),
+            conversationId,
+          })
+        }
+      }
+      if (fresh.length > 0) void get().loadConversations()
+      if (newest && activeId === conversationId) {
+        void fetch(`/api/conversations/${conversationId}/read`, { method: 'POST' })
+        void fetch('/api/messages/receipts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messageIds: freshForMe.map((m) => m.id) }),
+        })
+        set((s) => ({ typingIn: { ...s.typingIn, [conversationId]: undefined } as Record<string, { name: string; at: number }> }))
+      }
+    } catch {
+      // network error — the poller or the next stub recovers
     }
   },
 

@@ -4,7 +4,9 @@ import { isResponse, ok, requireUser } from '@/lib/api-helpers'
 
 /** GET /api/search?q= — full-text-ish message search across my conversations.
  *  E2EE (beta) conversations are skipped server-side (server never sees plaintext);
- *  the client additionally searches decrypted history locally. */
+ *  the client additionally searches decrypted history locally.
+ *  Messages deleted for me (hidden receipt) are excluded, and the whole query
+ *  is one SQL statement — no per-conversation loop. */
 export async function GET(req: NextRequest) {
   const me = await requireUser()
   if (isResponse(me)) return me
@@ -13,46 +15,49 @@ export async function GET(req: NextRequest) {
 
   const memberships = await db.conversationMember.findMany({
     where: { userId: me.id },
-    include: { conversation: { include: { members: { include: { user: { select: { displayName: true } } } } } } },
+    select: { conversationId: true, conversation: { select: { e2eeEnabled: true } } },
+  })
+  const convIds = memberships.filter((m) => !m.conversation.e2eeEnabled).map((m) => m.conversationId)
+  if (convIds.length === 0) return ok({ results: [] })
+
+  const messages = await db.message.findMany({
+    where: {
+      conversationId: { in: convIds },
+      encrypted: false,
+      kind: { not: 'system' },
+      text: { contains: q, mode: 'insensitive' as const },
+      // never resurface messages the searcher deleted for themselves
+      receipts: { none: { userId: me.id, hidden: true } },
+    },
+    include: {
+      sender: { select: { displayName: true } },
+      conversation: {
+        select: {
+          isGroup: true,
+          name: true,
+          members: {
+            where: { userId: { not: me.id } },
+            select: { user: { select: { displayName: true } } },
+            take: 1,
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 30,
   })
 
-  const hits: Array<{
-    conversationId: string
-    messageId: string
-    text: string
-    senderId: string
-    senderName: string
-    createdAt: string
-    convTitle: string
-  }> = []
-  for (const m of memberships) {
-    if (m.conversation.e2eeEnabled) continue
-    const convTitle = m.conversation.isGroup
-      ? (m.conversation.name ?? 'Group')
-      : (m.conversation.members.find((x) => x.userId !== me.id)?.user.displayName ?? 'Chat')
-    const messages = await db.message.findMany({
-      where: {
-        conversationId: m.conversationId,
-        encrypted: false,
-        kind: { not: 'system' },
-        text: { contains: q, mode: 'insensitive' as const },
-      },
-      include: { sender: { select: { displayName: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-    })
-    for (const msg of messages) {
-      hits.push({
-        conversationId: m.conversationId,
-        messageId: msg.id,
-        text: msg.text,
-        senderId: msg.senderId,
-        senderName: msg.sender.displayName,
-        createdAt: msg.createdAt.toISOString(),
-        convTitle,
-      })
+  const hits = messages.map((msg) => {
+    const other = msg.conversation.members[0]?.user.displayName
+    return {
+      conversationId: msg.conversationId,
+      messageId: msg.id,
+      text: msg.text,
+      senderId: msg.senderId,
+      senderName: msg.sender.displayName,
+      createdAt: msg.createdAt.toISOString(),
+      convTitle: msg.conversation.isGroup ? (msg.conversation.name ?? 'Group') : (other ?? 'Chat'),
     }
-  }
-  hits.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-  return ok({ results: hits.slice(0, 30) })
+  })
+  return ok({ results: hits })
 }

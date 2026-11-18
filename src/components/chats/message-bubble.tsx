@@ -203,7 +203,7 @@ export function MessageBubble({
 }
 
 function StatusTicks({ message }: { message: MessageDTO }) {
-  if (message.read) return <CheckCheck className="h-3.5 w-3.5 text-[#0E7490]" aria-label="Read" />
+  if (message.read) return <CheckCheck className="h-3.5 w-3.5 text-[#06303D]" aria-label="Read" />
   if (message.delivered) return <CheckCheck className="h-3.5 w-3.5 opacity-70" aria-label="Delivered" />
   return <Check className="h-3.5 w-3.5 opacity-70" aria-label="Sent" />
 }

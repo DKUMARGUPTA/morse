@@ -79,3 +79,6 @@ server.log
 .dev.vars
 mini-services/realtime-worker/.wrangler/
 tool-results/
+
+# replica-skill working reports (local research, not shipped)
+replica/

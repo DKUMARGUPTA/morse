@@ -62,7 +62,7 @@
   --accent-foreground: #E7EEFB;
   --destructive: #F87171;
   --border: #1E2C4F;
-  --input: #1E2C4F;
+  --input: #526BA0; /* WCAG UI-component minimum on #0A1224 (was #1E2C4F, 1.36:1) */
   --ring: #22D3EE;
   --chart-1: #22D3EE;
   --chart-2: #34D399;

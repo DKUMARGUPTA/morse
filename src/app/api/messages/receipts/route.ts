@@ -12,8 +12,14 @@ export async function POST(req: NextRequest) {
     if (messageIds.length === 0) return ok({ success: true })
 
     const now = new Date()
+    // membership guard: receipt ids may only reference messages in
+    // conversations the caller is actually a member of
     const msgs = await db.message.findMany({
-      where: { id: { in: messageIds }, senderId: { not: me.id } },
+      where: {
+        id: { in: messageIds },
+        senderId: { not: me.id },
+        conversation: { members: { some: { userId: me.id } } },
+      },
       select: { id: true, senderId: true, conversationId: true },
     })
     for (const msg of msgs) {

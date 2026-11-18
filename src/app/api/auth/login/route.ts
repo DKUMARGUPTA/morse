@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { setSessionCookie, verifyPassword } from '@/lib/auth'
 import { fail } from '@/lib/api-helpers'
-import { clientIp, rateLimit } from '@/lib/rate-limit'
+import { clientIp, dbRateLimit } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,8 +12,9 @@ export async function POST(req: NextRequest) {
     if (!email || !password) return fail(400, 'MISSING_FIELDS', 'Email and password are required.')
 
     // brute-force guard: 10/min per IP and 5/min per IP+email
+    // (DB-backed — the in-memory map resets on every serverless cold start)
     const ip = clientIp(req)
-    if (!rateLimit(`login:${ip}`, 10, 60_000) || !rateLimit(`login:${ip}:${email}`, 5, 60_000)) {
+    if (!(await dbRateLimit(`login:${ip}`, 10, 60_000)) || !(await dbRateLimit(`login:${ip}:${email}`, 5, 60_000))) {
       return fail(429, 'TOO_MANY_ATTEMPTS', 'Too many attempts. Try again in a minute.')
     }
 

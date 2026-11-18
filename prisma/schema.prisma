@@ -157,6 +157,8 @@ model Invitation {
   status       String    @default("pending") // pending | accepted | declined | revoked
   createdAt    DateTime  @default(now())
   expiresAt    DateTime
+
+  @@index([createdById, status, expiresAt])
 }
 
 model Block {
@@ -168,6 +170,7 @@ model Block {
   createdAt DateTime @default(now())
 
   @@unique([blockerId, blockedId])
+  @@index([blockedId]) // "am I blocked by X?" checks scan this direction too
 }
 
 model Report {
@@ -178,6 +181,19 @@ model Report {
   reported   User     @relation("Reported", fields: [reportedId], references: [id], onDelete: Cascade)
   reason     String
   createdAt  DateTime @default(now())
+
+  @@index([reporterId])
+  @@index([reportedId])
+}
+
+// Serverless-safe rate limiting: one row per limiter key, fixed windows.
+// see src/lib/rate-limit.ts (dbRateLimit)
+model RateLimit {
+  key         String   @id
+  count       Int      @default(0)
+  windowStart DateTime @default(now())
+
+  @@index([windowStart])
 }
 
 model LearningProgress {

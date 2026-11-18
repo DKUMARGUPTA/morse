@@ -74,16 +74,21 @@ const SB_MESSAGE_EVENTS = new Set(['message:new', 'message:update'])
 
 /** Build the Supabase batch-broadcast body. Topic mapping: room `user:<id>` /
  *  `conv:<id>` (no prefix here — the realtime server exposes joined topics as
- *  `realtime:<topic>`). Payloads over ~2.4 KB become `{conversationId,
- *  stub:true}` markers; clients refetch the conversation (payload limit). */
+ *  `realtime:<topic>`).
+ *
+ *  SECURITY: Supabase topics here are public broadcast channels — the client
+ *  joins with the anon key (`private: false`), so anyone holding the key and
+ *  a user/conversation id can listen in. Message fan-out therefore carries
+ *  METADATA ONLY ({conversationId, stub}); the message body never crosses
+ *  this bus. Clients refetch the conversation over the authenticated API —
+ *  the same stub path already used for oversized payloads. */
 function buildSupabaseBody(room: string, event: string, data: unknown): string {
   let payload = data
-  try {
-    if (data && typeof data === 'object' && JSON.stringify(data).length > 2400 && SB_MESSAGE_EVENTS.has(event)) {
-      payload = { conversationId: (data as { conversationId?: string }).conversationId, stub: true }
-    }
-  } catch {
-    /* keep original payload */
+  if (SB_MESSAGE_EVENTS.has(event)) {
+    payload = { conversationId: (data as { conversationId?: string })?.conversationId, stub: true }
+  } else if (data && typeof data === 'object' && JSON.stringify(data).length > 2400) {
+    // other events stay metadata-sized; truncate anything oversized defensively
+    payload = { conversationId: (data as { conversationId?: string })?.conversationId, stub: true }
   }
   return JSON.stringify({ messages: [{ topic: room, event, payload: payload ?? {} }] })
 }

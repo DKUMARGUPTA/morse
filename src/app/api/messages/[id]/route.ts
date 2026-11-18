@@ -48,8 +48,18 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   const me = await requireUser()
   if (isResponse(me)) return me
   const { id } = await ctx.params
-  const msg = await db.message.findUnique({ where: { id } })
+  // membership guard: hidden receipts may only be created on messages in
+  // conversations the caller is actually a member of
+  const msg = await db.message.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      conversationId: true,
+      conversation: { select: { members: { where: { userId: me.id }, select: { id: true } } } },
+    },
+  })
   if (!msg) return fail(404, 'NOT_FOUND')
+  if (msg.conversation.members.length === 0) return fail(403, 'FORBIDDEN')
 
   await db.messageReceipt.upsert({
     where: { messageId_userId: { messageId: id, userId: me.id } },
